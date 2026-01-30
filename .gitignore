@@ -3,6 +3,8 @@
 /server
 /git-watch
 agents/git-watch/git-watch
+agents/github-import/github-import
+agents/gitlab-import/gitlab-import
 /github-import
 *.exe
 
