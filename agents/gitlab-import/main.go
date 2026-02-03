@@ -29,6 +29,9 @@ type GitLabEvent struct {
 	UserID    int       `json:"user_id"`
 	CreatedAt time.Time `json:"created_at"`
 	EventType string    `json:"action_name"`
+	PushData  struct {
+		CommitCount int `json:"commit_count"`
+	} `json:"push_data"`
 }
 
 // Your App's Schema
@@ -107,10 +110,11 @@ func main() {
 
 	// Fetch user events (contributions)
 	now := time.Now()
-	oneYearAgo := now.AddDate(-1, 0, 0)
-	after := oneYearAgo.Format("2006-01-02")
+	// Start from the beginning of the current year
+	startOfYear := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
+	after := startOfYear.Format("2006-01-02")
 
-	eventsURL := fmt.Sprintf("https://%s/api/v4/users/%d/events?action=created&per_page=100&after=%s", GitLabHost, userID, after)
+	eventsURL := fmt.Sprintf("https://%s/api/v4/users/%d/events?per_page=100&after=%s", GitLabHost, userID, after)
 
 	// Group contributions by date
 	contributionsByDate := make(map[string]int)
@@ -149,8 +153,20 @@ func main() {
 
 		// Count contributions by date
 		for _, event := range events {
-			date := event.CreatedAt.Format("2006-01-02")
-			contributionsByDate[date]++
+			count := 0
+			switch event.EventType {
+			case "pushed", "pushed to", "pushed new":
+				if event.PushData.CommitCount > 0 {
+					count = event.PushData.CommitCount
+				}
+			case "created", "closed", "merged", "opened", "accepted", "approved", "commented on":
+				count = 1
+			}
+
+			if count > 0 {
+				date := event.CreatedAt.Format("2006-01-02")
+				contributionsByDate[date] += count
+			}
 		}
 
 		page++
@@ -194,7 +210,7 @@ func main() {
 		}
 	}
 
-	fmt.Printf("📊 Total contributions in the last year: %d\n", totalContributions)
+	fmt.Printf("📊 Total contributions found: %d\n", totalContributions)
 	fmt.Printf("✅ Prepared %d contribution events for import\n", len(myContributions))
 
 	// Check if dry run
