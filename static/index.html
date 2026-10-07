@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
     <meta charset="UTF-8">
@@ -7,9 +7,9 @@
     <meta name="theme-color" content="#0d1117">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Contribution Graph</title>
+    <title>贡献图表</title>
     <meta name="description"
-        content="Personal contribution tracker - visualize your coding, fitness, reading, and productivity activities across all platforms">
+        content="个人贡献追踪器 - 可视化你在各个平台上的代码编写、健身、阅读和生产力活动">
     <link rel="manifest" href="/manifest.json">
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
@@ -411,28 +411,28 @@
 
 <body>
     <div class="container">
-        <h1>Open Contribution Graph</h1>
+        <h1>开放式贡献图表</h1>
 
         <div class="header-controls-global">
             <select id="year"></select>
         </div>
 
         <div id="graphs-container">
-            <!-- All graph boxes will be inserted here -->
+            <!-- 所有图表盒子将在这里插入 -->
         </div>
 
-        <footer><a href="/mobile.html">📱 Mobile Logger</a> · <a
+        <footer><a href="/mobile.html">📱 手机打卡记录</a> · <a
                 href="https://github.com/Tomer-Barak/contribution-graph">GitHub</a></footer>
     </div>
 
     <script>
         // Source color schemes
         const sourceColors = {
-            'git': { rgb: '35,134,54', hex: '#238636', name: 'Git Commits' },
+            'git': { rgb: '35,134,54', hex: '#238636', name: 'Git 提交' },
             'github-import': { rgb: '35,134,54', hex: '#238636', name: 'GitHub' },
             'gitlab-import': { rgb: '59,130,246', hex: '#3B82F6', name: 'GitLab' },
-            'coffee': { rgb: '139,69,19', hex: '#8B4513', name: 'Coffee' },
-            'default': { rgb: '139,148,158', hex: '#8b949e', name: 'Other' }
+            'coffee': { rgb: '139,69,19', hex: '#8B4513', name: '咖啡' },
+            'default': { rgb: '139,148,158', hex: '#8b949e', name: '其他' }
         };
 
         let charts = {};
@@ -447,7 +447,7 @@
             const yearSel = document.getElementById('year');
             const currentYear = new Date().getFullYear();
             for (let y = currentYear; y >= currentYear - 5; y--) {
-                yearSel.innerHTML += `<option value="${y}" ${y === year ? 'selected' : ''}>${y}</option>`;
+                yearSel.innerHTML += `<option value="${y}" ${y === year ? 'selected' : ''}>${y} 年</option>`;
             }
 
             yearSel.onchange = async () => {
@@ -520,7 +520,7 @@
             // Render graphs in order
             orderedList.forEach(sourceId => {
                 if (sourceId === 'combined') {
-                    renderGraph('combined', 'Combined', allData, container);
+                    renderGraph('combined', '综合概览', allData, container);
                 } else if (sources[sourceId]) {
                     const color = sourceColors[sourceId] || sourceColors.default;
                     const sourceData = allData.filter(c => c.source === sourceId);
@@ -545,7 +545,7 @@
             try {
                 localStorage.setItem('dashboard_graph_order', JSON.stringify(order));
             } catch (e) {
-                console.error('Failed to save graph order:', e);
+                console.error('保存图表顺序失败:', e);
             }
         }
 
@@ -657,10 +657,10 @@
             const legendColor = isCombined ? sourceColors.git : (sourceColors[sourceId] || sourceColors.default);
 
             const combineModeSelector = isCombined ? `
-                <select id="combineMode" title="How to combine sources">
-                    <option value="winner" ${combineMode === 'winner' ? 'selected' : ''}>Winner Takes All</option>
-                    <option value="blend" ${combineMode === 'blend' ? 'selected' : ''}>Blend Colors</option>
-                    <option value="stack" ${combineMode === 'stack' ? 'selected' : ''}>Stack (Sum)</option>
+                <select id="combineMode" title="选择合并来源的方式">
+                    <option value="winner" ${combineMode === 'winner' ? 'selected' : ''}>胜者全拿 (主导色)</option>
+                    <option value="blend" ${combineMode === 'blend' ? 'selected' : ''}>颜色混合</option>
+                    <option value="stack" ${combineMode === 'stack' ? 'selected' : ''}>堆叠 (总和)</option>
                 </select>
             ` : '';
 
@@ -670,7 +670,7 @@
                         <h2>${sourceName}</h2>
                         <span class="source-badge">
                             <span class="dot" style="background: ${color.hex}"></span>
-                            ${data.length} contributions
+                            ${data.length} 次贡献
                         </span>
                         ${combineModeSelector}
                     </div>
@@ -679,11 +679,11 @@
                     <div id="${heatmapId}" class="heatmap"></div>
                 </div>
                 <div class="legend">
-                    <div class="legend-item"><div class="legend-box" style="background:#161b22"></div>None</div>
-                    <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.3)"></div>Low</div>
-                    <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.5)"></div>Medium</div>
-                    <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.75)"></div>Med-High</div>
-                    <div class="legend-item"><div class="legend-box" style="background:${legendColor.hex}"></div>High</div>
+                    <div class="legend-item"><div class="legend-box" style="background:#161b22"></div>无</div>
+                    <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.3)"></div>少</div>
+                    <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.5)"></div>中</div>
+                    <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.75)"></div>中高</div>
+                    <div class="legend-item"><div class="legend-box" style="background:${legendColor.hex}"></div>高</div>
                 </div>
             `;
 
@@ -720,7 +720,7 @@
                         const dayStats = days[date];
 
                         let tooltip = `<b>${date}</b><br/>`;
-                        tooltip += `${count} contribution${count !== 1 ? 's' : ''}`;
+                        tooltip += `${count} 次贡献`;
 
                         if (isCombined && dayStats) {
                             tooltip += '<br/><br/>';
@@ -744,8 +744,8 @@
                     itemStyle: { color: '#161b22', borderColor: '#0d1117', borderWidth: 1 },
                     splitLine: { show: false },
                     yearLabel: { show: false },
-                    dayLabel: { color: '#8b949e', nameMap: ['', 'M', '', 'W', '', 'F', ''] },
-                    monthLabel: { color: '#8b949e', fontSize: isMobile ? 10 : 12 }
+                    dayLabel: { color: '#8b949e', nameMap: ['', '一', '', '三', '', '五', ''] },
+                    monthLabel: { color: '#8b949e', fontSize: isMobile ? 10 : 12, nameMap: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'] }
                 },
                 series: {
                     type: 'heatmap',
