@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
     <meta charset="UTF-8">
@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#0d1117">
-    <title>Logger</title>
+    <title>记录打卡</title>
     <link rel="manifest" href="/manifest.json">
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <style>
@@ -305,34 +305,34 @@
 
 <body>
     <div class="header">
-        <h1>Log Event</h1>
+        <h1>记录事件</h1>
         <div style="display: flex; gap: 8px;">
-            <button class="edit-btn" onclick="syncWithServer()" title="Sync with server">↻</button>
-            <button class="edit-btn" onclick="toggleEdit()">Edit</button>
+            <button class="edit-btn" onclick="syncWithServer()" title="与服务器同步">↻</button>
+            <button class="edit-btn" onclick="toggleEdit()">编辑</button>
         </div>
     </div>
     <div class="grid" id="grid"></div>
-    <div class="footer"><a href="/">← Dashboard</a></div>
-    <div id="toast">✅ Logged!</div>
+    <div class="footer"><a href="/">← 返回仪表盘</a></div>
+    <div id="toast">✅ 已记录！</div>
     <div id="sync-toast"
         style="visibility: hidden; background: #3b82f6; color: #fff; text-align: center; border-radius: 50px; padding: 12px 24px; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); font-weight: 600; z-index: 100;">
-        ↻ Synced!</div>
+        ↻ 已同步！</div>
 
     <!-- Add Event Modal -->
     <div class="modal" id="modal">
         <div class="modal-content">
-            <h2>Add Event Type</h2>
-            <label>Name</label>
-            <input type="text" id="eventName" placeholder="e.g., Exercise">
-            <label>Source ID</label>
-            <input type="text" id="eventSource" placeholder="e.g., exercise">
-            <label>Emoji</label>
+            <h2>添加事件类型</h2>
+            <label>名称</label>
+            <input type="text" id="eventName" placeholder="例如：运动">
+            <label>来源标识 (Source ID)</label>
+            <input type="text" id="eventSource" placeholder="例如：exercise">
+            <label>表情符号</label>
             <div class="emoji-picker" id="emojiPicker"></div>
-            <label>Color</label>
+            <label>颜色</label>
             <div class="color-picker" id="colorPicker"></div>
             <div class="modal-buttons">
-                <button class="btn-cancel" onclick="closeModal()">Cancel</button>
-                <button class="btn-save" onclick="saveEvent()">Add</button>
+                <button class="btn-cancel" onclick="closeModal()">取消</button>
+                <button class="btn-save" onclick="saveEvent()">添加</button>
             </div>
         </div>
     </div>
@@ -340,15 +340,15 @@
     <script>
         // Known presets for auto-discovery
         const presets = {
-            'git': { name: 'Git', emoji: '💻', color: '#238636' },
+            'git': { name: 'Git 提交', emoji: '💻', color: '#238636' },
             'github-import': { name: 'GitHub', emoji: '🐙', color: '#238636' },
             'gitlab-import': { name: 'GitLab', emoji: '🦊', color: '#3B82F6' },
-            'coffee': { name: 'Coffee', emoji: '☕', color: '#8B4513' }
+            'coffee': { name: '咖啡', emoji: '☕', color: '#8B4513' }
         };
 
         // Default event types (fallback)
         const defaultEvents = [
-            { id: 'coffee', name: 'Coffee', emoji: '☕', color: '#8B4513', context: 'manual' }
+            { id: 'coffee', name: '咖啡', emoji: '☕', color: '#8B4513', context: 'manual' }
         ];
 
         // Available emojis
@@ -381,12 +381,12 @@
 
         // Sync with server sources
         async function syncWithServer() {
-            const btn = document.querySelector('button[title="Sync with server"]');
+            const btn = document.querySelector('button[title="与服务器同步"]');
             btn.style.animation = 'spin 1s linear infinite';
 
             try {
                 const res = await fetch('/api/stats');
-                if (!res.ok) throw new Error('Failed to fetch stats');
+                if (!res.ok) throw new Error('获取统计数据失败');
                 const stats = await res.json();
 
                 const serverSources = Object.keys(stats.by_source || {});
@@ -425,8 +425,8 @@
                 setTimeout(() => t.style.visibility = 'hidden', 2000);
 
             } catch (e) {
-                console.error('Sync failed:', e);
-                alert('Sync failed: Could not reach server');
+                console.error('同步失败:', e);
+                alert('同步失败：无法连接到服务器');
             } finally {
                 btn.style.animation = 'none';
             }
@@ -451,7 +451,7 @@
                 grid.innerHTML += `
                     <button class="btn add-btn" onclick="openModal()">
                         <span class="emoji">+</span>
-                        Add New
+                        添加新事件
                     </button>
                 `;
             }
@@ -473,13 +473,13 @@
             isEditing = !isEditing;
             const btn = document.querySelectorAll('.edit-btn')[1]; // The second button is Edit
             btn.classList.toggle('active', isEditing);
-            btn.textContent = isEditing ? 'Done' : 'Edit';
+            btn.textContent = isEditing ? '完成' : '编辑';
             render();
         }
 
         // Delete an event
         function deleteEvent(index) {
-            if (confirm('Delete this event type?')) {
+            if (confirm('确定要删除这个事件类型吗？')) {
                 const events = loadEvents();
                 events.splice(index, 1);
                 saveEvents(events);
@@ -537,7 +537,7 @@
             const source = document.getElementById('eventSource').value.trim().toLowerCase().replace(/\s+/g, '-');
 
             if (!name || !source) {
-                alert('Please fill in all fields');
+                alert('请填写所有字段');
                 return;
             }
 
@@ -570,7 +570,7 @@
                 }])
             }).then(r => {
                 if (r.ok) toast();
-            }).catch(() => alert('Connection error'));
+            }).catch(() => alert('连接错误'));
         }
 
         // Show toast
