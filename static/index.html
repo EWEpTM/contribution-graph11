@@ -581,22 +581,22 @@ function renderHeatmap() {
                 return tip;
             }
         },
-        calendar: {
-            top: 16,
-            left: leftPad,
-            right: rightPad,
-            cellSize: [cell, cell],
-            range: String(year),
-            itemStyle: { color: '#161b22', borderColor: '#0d1117', borderWidth: 1 },
-            splitLine: { show: false },
-            yearLabel: { show: false },
-            dayLabel: {
-                color: '#8b949e',
-                fontSize: isMobile ? 9 : 11,
-                nameMap: ['日', '一', '二', '三', '四', '五', '六']
-            },
-            monthLabel: { color: '#8b949e', fontSize: isMobile ? 9 : 11 }
-        },
+calendar: {
+    top: 20,
+    left: leftPad,
+    right: rightPad,
+    cellSize: [cellSize, cellSize],
+    range: year.toString(),
+    itemStyle: { color: '#161b22', borderColor: '#0d1117', borderWidth: 1 },
+    splitLine: { show: false },
+    yearLabel: { show: false },
+    dayLabel: {
+        color: '#8b949e',
+        firstDay: 1,
+        nameMap: ['日', '一', '二', '三', '四', '五', '六']
+    },
+    monthLabel: { color: '#8b949e', fontSize: isMobile ? 10 : 12 }
+},
         series: {
             type: 'heatmap',
             coordinateSystem: 'calendar',
