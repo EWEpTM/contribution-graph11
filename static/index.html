@@ -444,16 +444,28 @@ function tabHtml(id, name, count, color) {
 
 function renderStats() {
     const bySource = statsData.by_source || {};
-    // 当前选中来源的统计
+
+    // 本地今天的日期字符串 YYYY-MM-DD
+    const now = new Date();
+    const todayStr = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, '0'),
+        String(now.getDate()).padStart(2, '0')
+    ].join('-');
+
     let total, today;
     if (currentSource === 'combined') {
-        total = statsData.total || allData.length;
-        today = statsData.today || 0;
+        total = allData.length;
+        today = allData.filter(c => {
+            const t = c.timestamp || '';
+            // 兼容 "2026-10-07T..." 和纯日期
+            const d = t.slice(0, 10);
+            return d === todayStr;
+        }).length;
     } else {
-        total = bySource[currentSource] || allData.filter(c => c.source === currentSource).length;
-        // 今日该来源
-        const todayStr = new Date().toISOString().slice(0, 10);
-        today = allData.filter(c => c.source === currentSource && (c.timestamp || '').startsWith(todayStr)).length;
+        const filtered = allData.filter(c => c.source === currentSource);
+        total = filtered.length;
+        today = filtered.filter(c => (c.timestamp || '').slice(0, 10) === todayStr).length;
     }
 
     document.getElementById('statTotal').textContent = total;

@@ -1,44 +1,29 @@
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#0d1117">
-    <title>Logger</title>
-    <link rel="manifest" href="/manifest.json">
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <title>打卡</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             background: #0d1117;
             color: #fff;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
             min-height: 100vh;
             padding: 16px;
             display: flex;
             flex-direction: column;
         }
-
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
             margin-bottom: 1rem;
         }
-
-        h1 {
-            font-size: 1.25rem;
-            color: #e6edf3;
-        }
-
+        h1 { font-size: 1.25rem; color: #e6edf3; }
         .edit-btn {
             background: #21262d;
             border: 1px solid #30363d;
@@ -48,13 +33,11 @@
             font-size: 0.85rem;
             cursor: pointer;
         }
-
         .edit-btn.active {
             background: #238636;
             border-color: #238636;
             color: #fff;
         }
-
         .grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -62,7 +45,6 @@
             flex: 1;
             align-content: start;
         }
-
         .btn {
             border: none;
             border-radius: 16px;
@@ -80,82 +62,41 @@
             -webkit-tap-highlight-color: transparent;
             position: relative;
         }
-
-        .btn:active {
-            transform: scale(0.95);
-            opacity: 0.8;
-        }
-
-        .btn .emoji {
-            font-size: 2rem;
-        }
-
-        .btn .delete-badge {
-            display: none;
-            position: absolute;
-            top: -8px;
-            right: -8px;
-            background: #f85149;
-            color: #fff;
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            font-size: 1.2rem;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .editing .btn .delete-badge {
-            display: flex;
-        }
-
-        .editing .btn:active {
-            transform: none;
-        }
-
+        .btn:active { transform: scale(0.95); opacity: 0.8; }
+        .btn .emoji { font-size: 2rem; }
+        .editing .btn:active { transform: none; }
         .add-btn {
             background: #21262d;
             border: 2px dashed #30363d;
             color: #8b949e;
         }
-
-        .add-btn .emoji {
-            font-size: 2rem;
-        }
-
-        /* Modal */
         .modal {
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0,0,0,0.8);
             z-index: 200;
             align-items: center;
             justify-content: center;
             padding: 20px;
         }
-
-        .modal.show {
-            display: flex;
-        }
-
+        .modal.show { display: flex; }
         .modal-content {
             background: #161b22;
             border: 1px solid #30363d;
             border-radius: 16px;
             padding: 24px;
             width: 100%;
-            max-width: 320px;
+            max-width: 340px;
+            max-height: 90vh;
+            overflow-y: auto;
         }
-
         .modal h2 {
             font-size: 1.1rem;
             margin-bottom: 16px;
             color: #e6edf3;
         }
-
-        .modal input,
-        .modal select {
+        .modal input {
             width: 100%;
             padding: 12px;
             border: 1px solid #30363d;
@@ -165,27 +106,31 @@
             font-size: 1rem;
             margin-bottom: 12px;
         }
-
-        .modal input:focus,
-        .modal select:focus {
+        .modal input:focus {
             outline: none;
             border-color: #238636;
         }
-
+        .modal input:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
         .modal label {
             display: block;
             color: #8b949e;
             font-size: 0.85rem;
             margin-bottom: 6px;
         }
-
-        .emoji-picker {
+        .hint {
+            font-size: 0.75rem;
+            color: #6e7681;
+            margin: -8px 0 12px;
+        }
+        .emoji-picker, .color-picker {
             display: grid;
             grid-template-columns: repeat(6, 1fr);
             gap: 8px;
             margin-bottom: 16px;
         }
-
         .emoji-option {
             font-size: 1.5rem;
             padding: 8px;
@@ -195,19 +140,10 @@
             border-radius: 8px;
             cursor: pointer;
         }
-
         .emoji-option.selected {
             border-color: #238636;
             background: #238636;
         }
-
-        .color-picker {
-            display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 8px;
-            margin-bottom: 16px;
-        }
-
         .color-option {
             width: 100%;
             aspect-ratio: 1;
@@ -215,16 +151,12 @@
             cursor: pointer;
             border: 2px solid transparent;
         }
-
-        .color-option.selected {
-            border-color: #fff;
-        }
-
+        .color-option.selected { border-color: #fff; }
         .modal-buttons {
             display: flex;
             gap: 12px;
+            margin-top: 4px;
         }
-
         .modal-buttons button {
             flex: 1;
             padding: 12px;
@@ -234,17 +166,21 @@
             font-weight: 600;
             cursor: pointer;
         }
-
-        .btn-cancel {
-            background: #21262d;
-            color: #8b949e;
+        .btn-cancel { background: #21262d; color: #8b949e; }
+        .btn-save { background: #238636; color: #fff; }
+        .btn-delete {
+            width: 100%;
+            margin-top: 16px;
+            padding: 12px;
+            border: 1px solid #f85149;
+            border-radius: 8px;
+            background: transparent;
+            color: #f85149;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
         }
-
-        .btn-save {
-            background: #238636;
-            color: #fff;
-        }
-
+        .btn-delete:active { background: rgba(248,81,73,0.15); }
         #toast {
             visibility: hidden;
             background: #238636;
@@ -259,42 +195,20 @@
             font-weight: 600;
             z-index: 100;
         }
-
-        #toast.show {
-            visibility: visible;
-            animation: fade 2s;
-        }
-
+        #toast.show { visibility: visible; animation: fade 2s; }
         @keyframes fade {
-
-            0%,
-            0%,
-            100% {
-                opacity: 0;
-            }
-
-            10%,
-            90% {
-                opacity: 1;
-            }
+            0%, 100% { opacity: 0; }
+            10%, 90% { opacity: 1; }
         }
-
         @keyframes spin {
-            0% {
-                transform: rotate(0deg);
-            }
-
-            100% {
-                transform: rotate(360deg);
-            }
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
-
         .footer {
             text-align: center;
             margin-top: 1rem;
             padding: 8px 0;
         }
-
         .footer a {
             color: #58a6ff;
             text-decoration: none;
@@ -302,288 +216,349 @@
         }
     </style>
 </head>
-
 <body>
     <div class="header">
-        <h1>Log Event</h1>
-        <div style="display: flex; gap: 8px;">
-            <button class="edit-btn" onclick="syncWithServer()" title="Sync with server">↻</button>
-            <button class="edit-btn" onclick="toggleEdit()">Edit</button>
+        <h1>记录事件</h1>
+        <div style="display:flex;gap:8px;">
+            <button class="edit-btn" id="syncBtn" onclick="syncWithServer()" title="与服务器同步">↻</button>
+            <button class="edit-btn" id="editBtn" onclick="toggleEdit()">编辑</button>
         </div>
     </div>
     <div class="grid" id="grid"></div>
-    <div class="footer"><a href="/">← Dashboard</a></div>
-    <div id="toast">✅ Logged!</div>
-    <div id="sync-toast"
-        style="visibility: hidden; background: #3b82f6; color: #fff; text-align: center; border-radius: 50px; padding: 12px 24px; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); font-weight: 600; z-index: 100;">
-        ↻ Synced!</div>
+    <div class="footer"><a href="/">← 返回仪表盘</a></div>
+    <div id="toast">✅ 已记录！</div>
+    <div id="sync-toast" style="visibility:hidden;background:#3b82f6;color:#fff;text-align:center;border-radius:50px;padding:12px 24px;position:fixed;bottom:80px;left:50%;transform:translateX(-50%);font-weight:600;z-index:100;">↻ 已同步！</div>
 
-    <!-- Add Event Modal -->
+    <!-- 新增 / 编辑弹窗 -->
     <div class="modal" id="modal">
         <div class="modal-content">
-            <h2>Add Event Type</h2>
-            <label>Name</label>
-            <input type="text" id="eventName" placeholder="e.g., Exercise">
-            <label>Source ID</label>
-            <input type="text" id="eventSource" placeholder="e.g., exercise">
-            <label>Emoji</label>
+            <h2 id="modalTitle">添加事件类型</h2>
+
+            <label>名称</label>
+            <input type="text" id="eventName" placeholder="例如：跑步">
+
+            <label>来源 ID</label>
+            <input type="text" id="eventSource" placeholder="例如：running">
+            <p class="hint" id="sourceHint">英文小写，保存后不可修改（对应打卡数据）</p>
+
+            <label>表情</label>
             <div class="emoji-picker" id="emojiPicker"></div>
-            <label>Color</label>
+
+            <label>颜色</label>
             <div class="color-picker" id="colorPicker"></div>
+
             <div class="modal-buttons">
-                <button class="btn-cancel" onclick="closeModal()">Cancel</button>
-                <button class="btn-save" onclick="saveEvent()">Add</button>
+                <button class="btn-cancel" onclick="closeModal()">取消</button>
+                <button class="btn-save" id="saveBtn" onclick="saveEvent()">添加</button>
             </div>
+
+            <!-- 仅编辑模式显示删除 -->
+            <button class="btn-delete" id="deleteBtn" style="display:none;" onclick="confirmDelete()">删除此事件类型</button>
         </div>
     </div>
 
-    <script>
-        // Known presets for auto-discovery
-        const presets = {
-            'git': { name: 'Git', emoji: '💻', color: '#238636' },
-            'github-import': { name: 'GitHub', emoji: '🐙', color: '#238636' },
-            'gitlab-import': { name: 'GitLab', emoji: '🦊', color: '#3B82F6' },
-            'coffee': { name: 'Coffee', emoji: '☕', color: '#8B4513' }
-        };
+<script>
+const presets = {
+    'git': { name: 'Git', emoji: '💻', color: '#238636' },
+    'github-import': { name: 'GitHub', emoji: '🐙', color: '#238636' },
+    'gitlab-import': { name: 'GitLab', emoji: '🦊', color: '#3B82F6' },
+    'coffee': { name: '喝咖啡', emoji: '☕', color: '#8B4513' }
+};
 
-        // Default event types (fallback)
-        const defaultEvents = [
-            { id: 'coffee', name: 'Coffee', emoji: '☕', color: '#8B4513', context: 'manual' }
-        ];
+const defaultEvents = [
+    { id: 'coffee', name: '喝咖啡', emoji: '☕', color: '#8B4513', context: 'manual' }
+];
 
-        // Available emojis
-        const emojis = ['☕', '🏃', '📚', '🧠', '💡', '🧘', '🎓', '💪', '🎯', '✍️', '🎵', '🌱', '💻', '🐙', '📱'];
+const emojis = ['☕','🏃','📚','🧠','💡','🧘','🎓','💪','🎯','✍️','🎵','🌱','💻','🐙','📱'];
+const colors = [
+    '#8B4513','#238636','#f97316','#eab308',
+    '#3b82f6','#a855f7','#ec4899','#ef4444',
+    '#14b8a6','#6366f1','#84cc16','#f59e0b'
+];
 
-        // Available colors
-        const colors = [
-            '#8B4513', '#238636', '#f97316', '#eab308',
-            '#3b82f6', '#a855f7', '#ec4899', '#ef4444',
-            '#14b8a6', '#6366f1', '#84cc16', '#f59e0b'
-        ];
+let isEditing = false;
+let selectedEmoji = emojis[0];
+let selectedColor = colors[0];
+let editingIndex = -1; // -1 = 新增，>=0 = 编辑
 
-        let isEditing = false;
-        let selectedEmoji = emojis[0];
-        let selectedColor = colors[0];
+function loadEvents() {
+    const saved = localStorage.getItem('loggerEvents');
+    return saved ? JSON.parse(saved) : defaultEvents;
+}
+function saveEvents(events) {
+    localStorage.setItem('loggerEvents', JSON.stringify(events));
+}
+function getDeleted() {
+    return JSON.parse(localStorage.getItem('deletedEventIds') || '[]');
+}
+function setDeleted(arr) {
+    localStorage.setItem('deletedEventIds', JSON.stringify(arr));
+}
 
-        // Load events from localStorage or use defaults
-        function loadEvents() {
-            const saved = localStorage.getItem('loggerEvents');
-            if (saved) {
-                return JSON.parse(saved);
-            }
-            return defaultEvents;
-        }
+async function syncWithServer() {
+    const btn = document.getElementById('syncBtn');
+    btn.style.animation = 'spin 1s linear infinite';
+    try {
+        const res = await fetch('/api/stats');
+        if (!res.ok) throw new Error('fail');
+        const stats = await res.json();
+        const serverSources = Object.keys(stats.by_source || {});
+        const localEvents = loadEvents();
+        const deleted = getDeleted();
+        let changed = false;
 
-        // Save events to localStorage
-        function saveEvents(events) {
-            localStorage.setItem('loggerEvents', JSON.stringify(events));
-        }
-
-        // Sync with server sources
-        async function syncWithServer() {
-            const btn = document.querySelector('button[title="Sync with server"]');
-            btn.style.animation = 'spin 1s linear infinite';
-
-            try {
-                const res = await fetch('/api/stats');
-                if (!res.ok) throw new Error('Failed to fetch stats');
-                const stats = await res.json();
-
-                const serverSources = Object.keys(stats.by_source || {});
-                const localEvents = loadEvents();
-                let changed = false;
-
-                // Add missing sources from server
-                serverSources.forEach(source => {
-                    if (!localEvents.find(e => e.id === source)) {
-                        const preset = presets[source] || {
-                            name: source.charAt(0).toUpperCase() + source.slice(1),
-                            emoji: '📱',
-                            color: '#8b949e'
-                        };
-
-                        localEvents.push({
-                            id: source,
-                            name: preset.name,
-                            emoji: preset.emoji,
-                            color: preset.color,
-                            context: 'manual'
-                        });
-                        changed = true;
-                    }
+        serverSources.forEach(source => {
+            if (deleted.includes(source)) return;
+            if (!localEvents.find(e => e.id === source)) {
+                const preset = presets[source] || {
+                    name: source.charAt(0).toUpperCase() + source.slice(1),
+                    emoji: '📱',
+                    color: '#8b949e'
+                };
+                localEvents.push({
+                    id: source,
+                    name: preset.name,
+                    emoji: preset.emoji,
+                    color: preset.color,
+                    context: 'manual'
                 });
-
-                if (changed) {
-                    saveEvents(localEvents);
-                    render();
-                }
-
-                // Show sync toast
-                const t = document.getElementById('sync-toast');
-                t.style.visibility = 'visible';
-                t.style.animation = 'fade 2s forwards';
-                setTimeout(() => t.style.visibility = 'hidden', 2000);
-
-            } catch (e) {
-                console.error('Sync failed:', e);
-                alert('Sync failed: Could not reach server');
-            } finally {
-                btn.style.animation = 'none';
+                changed = true;
             }
-        }
+        });
 
-        // Render the event buttons
-        function render() {
-            const grid = document.getElementById('grid');
-            const events = loadEvents();
-
-            grid.innerHTML = events.map((e, i) => `
-                <button class="btn" style="background: linear-gradient(135deg, ${e.color}, ${adjustColor(e.color, -20)})"
-                        onclick="${isEditing ? `deleteEvent(${i})` : `log('${e.id}', '${e.context || 'manual'}')`}">
-                    <span class="delete-badge">×</span>
-                    <span class="emoji">${e.emoji}</span>
-                    ${e.name}
-                </button>
-            `).join('');
-
-            // Add the "+" button when editing
-            if (isEditing) {
-                grid.innerHTML += `
-                    <button class="btn add-btn" onclick="openModal()">
-                        <span class="emoji">+</span>
-                        Add New
-                    </button>
-                `;
-            }
-
-            document.body.classList.toggle('editing', isEditing);
-        }
-
-        // Adjust color brightness
-        function adjustColor(hex, percent) {
-            const num = parseInt(hex.slice(1), 16);
-            const r = Math.min(255, Math.max(0, (num >> 16) + percent));
-            const g = Math.min(255, Math.max(0, ((num >> 8) & 0x00FF) + percent));
-            const b = Math.min(255, Math.max(0, (num & 0x0000FF) + percent));
-            return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
-        }
-
-        // Toggle edit mode
-        function toggleEdit() {
-            isEditing = !isEditing;
-            const btn = document.querySelectorAll('.edit-btn')[1]; // The second button is Edit
-            btn.classList.toggle('active', isEditing);
-            btn.textContent = isEditing ? 'Done' : 'Edit';
+        if (changed) {
+            saveEvents(localEvents);
             render();
         }
+        const t = document.getElementById('sync-toast');
+        t.style.visibility = 'visible';
+        t.style.animation = 'fade 2s forwards';
+        setTimeout(() => t.style.visibility = 'hidden', 2000);
+    } catch (e) {
+        alert('同步失败：无法连接服务器');
+    } finally {
+        btn.style.animation = 'none';
+    }
+}
 
-        // Delete an event
-        function deleteEvent(index) {
-            if (confirm('Delete this event type?')) {
-                const events = loadEvents();
-                events.splice(index, 1);
-                saveEvents(events);
-                render();
-            }
+function render() {
+    const grid = document.getElementById('grid');
+    const events = loadEvents();
+
+    grid.innerHTML = events.map((e, i) => `
+        <button class="btn" style="background:linear-gradient(135deg,${e.color},${adjustColor(e.color,-20)})"
+            onclick="${isEditing ? `openEdit(${i})` : `log('${e.id}','${e.context||'manual'}')`}">
+            <span class="emoji">${e.emoji}</span>
+            ${e.name}
+        </button>
+    `).join('');
+
+    if (isEditing) {
+        grid.innerHTML += `
+            <button class="btn add-btn" onclick="openAdd()">
+                <span class="emoji">+</span>
+                新增
+            </button>
+        `;
+    }
+    document.body.classList.toggle('editing', isEditing);
+}
+
+function adjustColor(hex, percent) {
+    const num = parseInt(hex.slice(1), 16);
+    const r = Math.min(255, Math.max(0, (num >> 16) + percent));
+    const g = Math.min(255, Math.max(0, ((num >> 8) & 0x00FF) + percent));
+    const b = Math.min(255, Math.max(0, (num & 0x0000FF) + percent));
+    return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
+function toggleEdit() {
+    isEditing = !isEditing;
+    const btn = document.getElementById('editBtn');
+    btn.classList.toggle('active', isEditing);
+    btn.textContent = isEditing ? '完成' : '编辑';
+    render();
+}
+
+/* ===== 新增 ===== */
+function openAdd() {
+    editingIndex = -1;
+    document.getElementById('modalTitle').textContent = '添加事件类型';
+    document.getElementById('saveBtn').textContent = '添加';
+    document.getElementById('deleteBtn').style.display = 'none';
+    document.getElementById('eventName').value = '';
+    document.getElementById('eventSource').value = '';
+    document.getElementById('eventSource').disabled = false;
+    document.getElementById('sourceHint').textContent = '英文小写，保存后不可修改（对应打卡数据）';
+    selectedEmoji = emojis[0];
+    selectedColor = colors[0];
+    renderEmojiPicker();
+    renderColorPicker();
+    document.getElementById('modal').classList.add('show');
+}
+
+/* ===== 编辑 ===== */
+function openEdit(index) {
+    editingIndex = index;
+    const e = loadEvents()[index];
+    if (!e) return;
+
+    document.getElementById('modalTitle').textContent = '修改事件类型';
+    document.getElementById('saveBtn').textContent = '保存';
+    document.getElementById('deleteBtn').style.display = 'block';
+    document.getElementById('eventName').value = e.name || '';
+    document.getElementById('eventSource').value = e.id || '';
+    document.getElementById('eventSource').disabled = true; // ID 不可改
+    document.getElementById('sourceHint').textContent = '来源 ID 不可修改（与历史打卡数据绑定）';
+    selectedEmoji = e.emoji || emojis[0];
+    selectedColor = e.color || colors[0];
+    renderEmojiPicker();
+    renderColorPicker();
+    document.getElementById('modal').classList.add('show');
+}
+
+function closeModal() {
+    document.getElementById('modal').classList.remove('show');
+    editingIndex = -1;
+}
+
+function renderEmojiPicker() {
+    document.getElementById('emojiPicker').innerHTML = emojis.map(e =>
+        `<div class="emoji-option ${e === selectedEmoji ? 'selected' : ''}" onclick="selectEmoji('${e}')">${e}</div>`
+    ).join('');
+}
+function renderColorPicker() {
+    document.getElementById('colorPicker').innerHTML = colors.map(c =>
+        `<div class="color-option ${c === selectedColor ? 'selected' : ''}" style="background:${c}" onclick="selectColor('${c}')"></div>`
+    ).join('');
+}
+function selectEmoji(e) { selectedEmoji = e; renderEmojiPicker(); }
+function selectColor(c) { selectedColor = c; renderColorPicker(); }
+
+function saveEvent() {
+    const name = document.getElementById('eventName').value.trim();
+    let source = document.getElementById('eventSource').value.trim().toLowerCase().replace(/\s+/g, '-');
+
+    if (!name) {
+        alert('请填写名称');
+        return;
+    }
+
+    const events = loadEvents();
+
+    if (editingIndex >= 0) {
+        // 修改：保留原 id
+        const old = events[editingIndex];
+        events[editingIndex] = {
+            ...old,
+            name,
+            emoji: selectedEmoji,
+            color: selectedColor
+        };
+    } else {
+        // 新增
+        if (!source) {
+            alert('请填写来源 ID');
+            return;
         }
-
-        // Open add modal
-        function openModal() {
-            document.getElementById('modal').classList.add('show');
-            document.getElementById('eventName').value = '';
-            document.getElementById('eventSource').value = '';
-            renderEmojiPicker();
-            renderColorPicker();
+        if (events.find(e => e.id === source)) {
+            alert('该来源 ID 已存在');
+            return;
         }
+        events.push({
+            id: source,
+            name,
+            emoji: selectedEmoji,
+            color: selectedColor,
+            context: 'manual'
+        });
+        // 若曾删除过，从黑名单移除
+        const deleted = getDeleted().filter(id => id !== source);
+        setDeleted(deleted);
+    }
 
-        // Close modal
-        function closeModal() {
-            document.getElementById('modal').classList.remove('show');
+    saveEvents(events);
+    closeModal();
+    render();
+}
+
+async function confirmDelete() {
+    if (editingIndex < 0) return;
+
+    const events = loadEvents();
+    const target = events[editingIndex];
+    if (!target) return;
+
+    const ok = confirm(
+        `确定彻底删除「${target.name}」吗？\n\n` +
+        `将同时删除：\n` +
+        `• 手机端的打卡按钮\n` +
+        `• 该来源在服务器上的全部历史打卡\n` +
+        `• 热力图上对应的所有格子\n\n` +
+        `此操作不可恢复。`
+    );
+    if (!ok) return;
+
+    // 1. 先删服务器数据
+    try {
+        const res = await fetch(
+            `/api/sources?source=${encodeURIComponent(target.id)}`,
+            { method: 'DELETE' }
+        );
+        if (!res.ok) {
+            const text = await res.text();
+            alert('删除服务器数据失败：' + text);
+            return;
         }
+        const data = await res.json();
+        console.log('已删除事件数:', data.deleted);
+    } catch (e) {
+        alert('网络错误，未能删除服务器数据');
+        return;
+    }
 
-        // Render emoji picker
-        function renderEmojiPicker() {
-            const picker = document.getElementById('emojiPicker');
-            picker.innerHTML = emojis.map(e => `
-                <div class="emoji-option ${e === selectedEmoji ? 'selected' : ''}" 
-                     onclick="selectEmoji('${e}')">${e}</div>
-            `).join('');
-        }
+    // 2. 再删本地按钮
+    events.splice(editingIndex, 1);
+    saveEvents(events);
 
-        // Render color picker
-        function renderColorPicker() {
-            const picker = document.getElementById('colorPicker');
-            picker.innerHTML = colors.map(c => `
-                <div class="color-option ${c === selectedColor ? 'selected' : ''}" 
-                     style="background: ${c}" onclick="selectColor('${c}')"></div>
-            `).join('');
-        }
+    const deleted = getDeleted();
+    if (!deleted.includes(target.id)) {
+        deleted.push(target.id);
+        setDeleted(deleted);
+    }
 
-        // Select emoji
-        function selectEmoji(emoji) {
-            selectedEmoji = emoji;
-            renderEmojiPicker();
-        }
+    closeModal();
+    render();
 
-        // Select color
-        function selectColor(color) {
-            selectedColor = color;
-            renderColorPicker();
-        }
+    // 可选：提示用户刷新仪表盘
+    alert(`「${target.name}」已彻底删除`);
+}
 
-        // Save new event
-        function saveEvent() {
-            const name = document.getElementById('eventName').value.trim();
-            const source = document.getElementById('eventSource').value.trim().toLowerCase().replace(/\s+/g, '-');
+function log(source, context) {
+    if (isEditing) return;
+    if (navigator.vibrate) navigator.vibrate(50);
+    fetch('/api/contributions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify([{
+            source,
+            context,
+            timestamp: new Date().toISOString(),
+            metadata: { device: 'mobile', manual: true }
+        }])
+    }).then(r => {
+        if (r.ok) toast();
+    }).catch(() => alert('连接失败'));
+}
 
-            if (!name || !source) {
-                alert('Please fill in all fields');
-                return;
-            }
+function toast() {
+    const t = document.getElementById('toast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2000);
+}
 
-            const events = loadEvents();
-            events.push({
-                id: source,
-                name: name,
-                emoji: selectedEmoji,
-                color: selectedColor,
-                context: 'manual'
-            });
-            saveEvents(events);
-            closeModal();
-            render();
-        }
-
-        // Log an event
-        function log(source, context) {
-            if (isEditing) return;
-            if (navigator.vibrate) navigator.vibrate(50);
-
-            fetch('/api/contributions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify([{
-                    source,
-                    context,
-                    timestamp: new Date().toISOString(),
-                    metadata: { device: 'mobile', manual: true }
-                }])
-            }).then(r => {
-                if (r.ok) toast();
-            }).catch(() => alert('Connection error'));
-        }
-
-        // Show toast
-        function toast() {
-            const t = document.getElementById('toast');
-            t.classList.add('show');
-            setTimeout(() => t.classList.remove('show'), 2000);
-        }
-
-        // Initialize
-        render();
-        syncWithServer();
-    </script>
+render();
+syncWithServer();
+</script>
 </body>
-
 </html>
