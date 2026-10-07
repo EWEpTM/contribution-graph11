@@ -19,32 +19,48 @@ type Contribution struct {
     Context   string          `json:"context"`
     Timestamp time.Time       `json:"timestamp"`
     MetaData  json.RawMessage `json:"metadata"`
+    LocalDate string          `json:"local_date,omitempty"`
 }
 
 var db *sql.DB
+var appLocation *time.Location
+
+func initLocation() {
+    tz := os.Getenv("TZ")
+    if tz == "" {
+        tz = "Asia/Shanghai"
+    }
+    loc, err := time.LoadLocation(tz)
+    if err != nil {
+        log.Printf("⚠️  Invalid TZ %q, fallback to Asia/Shanghai: %v", tz, err)
+        loc, err = time.LoadLocation("Asia/Shanghai")
+        if err != nil {
+            log.Fatalf("Failed to load timezone: %v", err)
+        }
+    }
+    appLocation = loc
+    log.Printf("🌏 Using timezone: %s", appLocation.String())
+}
 
 func main() {
-    var err error
+    initLocation()
 
-    // Database path from env or default
     dbPath := os.Getenv("DB_PATH")
     if dbPath == "" {
         dbPath = "./data/contributions.db"
     }
 
-    // Ensure data directory exists
     if err := os.MkdirAll("./data", 0755); err != nil {
         log.Fatalf("Failed to create data directory: %v", err)
     }
 
-    // Initialize SQLite Database
+    var err error
     db, err = sql.Open("sqlite", dbPath)
     if err != nil {
         log.Fatal(err)
     }
     defer db.Close()
 
-    // Create the Events Table
     createTableSQL := `
     CREATE TABLE IF NOT EXISTS events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -59,34 +75,27 @@ func main() {
     CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
     `
 
-    _, err = db.Exec(createTableSQL)
-    if err != nil {
+    if _, err = db.Exec(createTableSQL); err != nil {
         log.Fatalf("Failed to create table: %v", err)
     }
 
-    // Create a new ServeMux for routing
     mux := http.NewServeMux()
-
-    // API Routes
     mux.HandleFunc("/api/contributions", handleContributions)
     mux.HandleFunc("/api/stats", handleGetStats)
     mux.HandleFunc("/api/health", handleHealth)
-    mux.HandleFunc("/api/sources", handleSources) // 彻底删除某个来源的全部数据
+    mux.HandleFunc("/api/sources", handleSources)
 
-    // Serve static files
     staticDir := os.Getenv("STATIC_DIR")
     if staticDir == "" {
         staticDir = "./static"
     }
     mux.Handle("/", http.FileServer(http.Dir(staticDir)))
 
-    // Get port from env or default
     port := os.Getenv("PORT")
     if port == "" {
         port = "8080"
     }
 
-    // CORS middleware wrapper
     handler := corsMiddleware(mux)
 
     fmt.Printf("🚀 Contribution Graph Server running on http://localhost:%s\n", port)
@@ -97,25 +106,21 @@ func main() {
     log.Fatal(http.ListenAndServe(":"+port, handler))
 }
 
-// CORS Middleware for cross-origin requests
 func corsMiddleware(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Access-Control-Allow-Origin", "*")
         w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-        // Prevent caching of API responses for faster year switching
         w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
-        if r.Method == "OPTIONS" {
+        if r.Method == http.MethodOptions {
             w.WriteHeader(http.StatusOK)
             return
         }
-
         next.ServeHTTP(w, r)
     })
 }
 
-// Combined handler for /api/contributions (routes GET vs POST)
 func handleContributions(w http.ResponseWriter, r *http.Request) {
     switch r.Method {
     case http.MethodGet:
@@ -129,11 +134,9 @@ func handleContributions(w http.ResponseWriter, r *http.Request) {
     }
 }
 
-// POST: Receive new events
+// POST: 写入时强制转换为应用时区（Docker TZ）的墙钟时间
 func handlePostContribution(w http.ResponseWriter, r *http.Request) {
     var contributions []Contribution
-
-    // Decode JSON body
     if err := json.NewDecoder(r.Body).Decode(&contributions); err != nil {
         http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
         return
@@ -146,7 +149,7 @@ func handlePostContribution(w http.ResponseWriter, r *http.Request) {
     }
 
     stmt, err := tx.Prepare(`
-        INSERT OR IGNORE INTO events (source, context, timestamp, metadata) 
+        INSERT OR IGNORE INTO events (source, context, timestamp, metadata)
         VALUES (?, ?, ?, ?)
     `)
     if err != nil {
@@ -163,8 +166,11 @@ func handlePostContribution(w http.ResponseWriter, r *http.Request) {
             metaString = "{}"
         }
 
-        _, err := stmt.Exec(c.Source, c.Context, c.Timestamp, metaString)
-        if err == nil {
+        // 前端传来的一般是 UTC；转到 Docker/应用时区后存本地墙钟
+        localTs := c.Timestamp.In(appLocation)
+        localStr := localTs.Format("2006-01-02 15:04:05")
+
+        if _, err := stmt.Exec(c.Source, c.Context, localStr, metaString); err == nil {
             count++
         }
     }
@@ -180,35 +186,29 @@ func handlePostContribution(w http.ResponseWriter, r *http.Request) {
         "processed": count,
         "message":   fmt.Sprintf("Processed %d contributions", count),
     })
-
     fmt.Printf("📥 Received %d events (from %d submitted)\n", count, len(contributions))
 }
 
-// GET: Retrieve contributions for the frontend
+// GET: 读出后按应用时区解释，JSON 带 +08:00，前端 slice 日期即本地日
 func handleGetContributions(w http.ResponseWriter, r *http.Request) {
-    // Query parameters
     year := r.URL.Query().Get("year")
     source := r.URL.Query().Get("source")
 
-    // Default to current year
     if year == "" {
-        year = fmt.Sprintf("%d", time.Now().Year())
+        year = fmt.Sprintf("%d", time.Now().In(appLocation).Year())
     }
 
-    // Parse year for range-based filtering (much faster than substr)
-    yearInt, err := fmt.Sscanf(year, "%d", new(int))
-    if err != nil || yearInt != 1 {
+    if _, err := strconv.Atoi(year); err != nil {
         http.Error(w, "Invalid year parameter", http.StatusBadRequest)
         return
     }
 
-    // Build query using range-based filtering for better index usage
     startDate := year + "-01-01"
     endDate := fmt.Sprintf("%d-01-01", mustAtoi(year)+1)
 
     query := `
-        SELECT source, context, timestamp, metadata 
-        FROM events 
+        SELECT source, context, timestamp, metadata
+        FROM events
         WHERE timestamp >= ? AND timestamp < ?
     `
     args := []interface{}{startDate, endDate}
@@ -217,7 +217,6 @@ func handleGetContributions(w http.ResponseWriter, r *http.Request) {
         query += " AND source = ?"
         args = append(args, source)
     }
-
     query += " ORDER BY timestamp DESC"
 
     rows, err := db.Query(query, args...)
@@ -236,12 +235,18 @@ func handleGetContributions(w http.ResponseWriter, r *http.Request) {
         if err := rows.Scan(&c.Source, &c.Context, &ts, &metaString); err != nil {
             continue
         }
-        c.Timestamp = ts
+
+        // SQLite 读出的 naive 时间按应用时区解释（不要当成 UTC）
+        c.Timestamp = time.Date(
+            ts.Year(), ts.Month(), ts.Day(),
+            ts.Hour(), ts.Minute(), ts.Second(), ts.Nanosecond(),
+            appLocation,
+        )
+        c.LocalDate = c.Timestamp.Format("2006-01-02")
         c.MetaData = json.RawMessage(metaString)
         events = append(events, c)
     }
 
-    // Return empty array instead of null
     if events == nil {
         events = []Contribution{}
     }
@@ -250,20 +255,17 @@ func handleGetContributions(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(events)
 }
 
-// GET: Statistics endpoint
 func handleGetStats(w http.ResponseWriter, r *http.Request) {
     stats := make(map[string]interface{})
 
-    // Total contributions
     var total int
     db.QueryRow("SELECT COUNT(*) FROM events").Scan(&total)
     stats["total"] = total
 
-    // Contributions by source
     rows, err := db.Query(`
-        SELECT source, COUNT(*) as count 
-        FROM events 
-        GROUP BY source 
+        SELECT source, COUNT(*) as count
+        FROM events
+        GROUP BY source
         ORDER BY count DESC
     `)
     if err == nil {
@@ -278,29 +280,29 @@ func handleGetStats(w http.ResponseWriter, r *http.Request) {
         stats["by_source"] = sources
     }
 
-    // Current streak
-    streak := calculateStreak()
-    stats["current_streak"] = streak
+    stats["current_streak"] = calculateStreak()
 
-    // Today's contributions (UTC; frontend may recompute with local date)
+    // 今日：按应用时区的日历日，不用 UTC 的 date('now')
+    todayStr := time.Now().In(appLocation).Format("2006-01-02")
     var today int
     db.QueryRow(`
-        SELECT COUNT(*) FROM events 
-        WHERE date(timestamp) = date('now')
-    `).Scan(&today)
+        SELECT COUNT(*) FROM events
+        WHERE date(timestamp) = ?
+    `, todayStr).Scan(&today)
     stats["today"] = today
+    stats["timezone"] = appLocation.String()
+    stats["today_date"] = todayStr
 
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(stats)
 }
 
-// DELETE /api/sources?source=xxx  — 彻底删除该来源的全部打卡数据
+// DELETE /api/sources?source=xxx
 func handleSources(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodOptions {
         w.WriteHeader(http.StatusOK)
         return
     }
-
     if r.Method != http.MethodDelete {
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
         return
@@ -319,18 +321,15 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
     }
 
     affected, _ := result.RowsAffected()
-
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(map[string]interface{}{
         "deleted": affected,
         "source":  source,
         "message": fmt.Sprintf("Deleted %d events for source %q", affected, source),
     })
-
     fmt.Printf("🗑️  Deleted %d events for source %q\n", affected, source)
 }
 
-// Calculate current contribution streak
 func calculateStreak() int {
     rows, err := db.Query(`
         SELECT DISTINCT date(timestamp) as day
@@ -344,36 +343,41 @@ func calculateStreak() int {
     defer rows.Close()
 
     streak := 0
-    expectedDate := time.Now().Truncate(24 * time.Hour)
+    nowLocal := time.Now().In(appLocation)
+    expectedStr := nowLocal.Format("2006-01-02")
+    expectedDate, _ := time.ParseInLocation("2006-01-02", expectedStr, appLocation)
 
     for rows.Next() {
         var dayStr string
         rows.Scan(&dayStr)
-        day, err := time.Parse("2006-01-02", dayStr)
+        day, err := time.ParseInLocation("2006-01-02", dayStr, appLocation)
         if err != nil {
             continue
         }
 
-        // Check if this day matches expected
         if day.Equal(expectedDate) || day.Equal(expectedDate.AddDate(0, 0, -1)) {
+            if day.Equal(expectedDate.AddDate(0, 0, -1)) && streak == 0 {
+                // 今天还没打卡，从昨天开始算连续
+                expectedDate = day
+            }
             streak++
             expectedDate = day.AddDate(0, 0, -1)
         } else if day.Before(expectedDate) {
-            // Gap found, streak ends
             break
         }
     }
-
     return streak
 }
 
-// Health check endpoint
 func handleHealth(w http.ResponseWriter, r *http.Request) {
     w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "status":   "ok",
+        "timezone": appLocation.String(),
+        "now":      time.Now().In(appLocation).Format(time.RFC3339),
+    })
 }
 
-// mustAtoi converts string to int, panics on error (for validated input)
 func mustAtoi(s string) int {
     n, err := strconv.Atoi(s)
     if err != nil {
