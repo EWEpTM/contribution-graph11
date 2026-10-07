@@ -124,6 +124,8 @@
             padding: 1.25rem;
         }
         .graph-header {
+            position: relative;
+            z-index: 2; /* 下拉在上 */
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -164,6 +166,10 @@
 
         /* 日历居中 + 响应式 */
         .heatmap-wrap {
+        position: relative;
+        z-index: 1;
+        overflow-x: auto;
+        overflow-y: visible; /* 避免纵向裁切 tooltip（若仍用默认挂载方式） */
             width: 100%;
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
@@ -547,6 +553,16 @@ function renderHeatmap() {
     chart.setOption({
         backgroundColor: 'transparent',
         tooltip: {
+            appendToBody: true,   // ECharts 5：挂到 body，不被卡片裁切
+            confine: false,       // 不限制在图表区域内
+            extraCssText: 'z-index: 9999; pointer-events: none;',
+           position: function (point, params, dom, rect, size) {
+           // point: 鼠标位置；尽量显示在格子上方，避免和下拉重叠
+           const x = point[0];
+           const y = point[1] - size.contentSize[1] - 12;
+           return [x, Math.max(8, y)];
+           },
+
             formatter: p => {
                 if (!p.data || !p.data.value) return '';
                 const date = p.data.value[0];
