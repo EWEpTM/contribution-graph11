@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
@@ -7,11 +7,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#0d1117">
-    <title>打卡</title>
+    <title>Logger</title>
     <link rel="manifest" href="/manifest.json">
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
     <style>
-        /* 原有 CSS 保持不变，仅增加中文字体 */
         * {
             margin: 0;
             padding: 0;
@@ -21,7 +20,7 @@
         body {
             background: #0d1117;
             color: #fff;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             min-height: 100vh;
             padding: 16px;
             display: flex;
@@ -124,6 +123,7 @@
             font-size: 2rem;
         }
 
+        /* Modal */
         .modal {
             display: none;
             position: fixed;
@@ -268,6 +268,7 @@
         @keyframes fade {
 
             0%,
+            0%,
             100% {
                 opacity: 0;
             }
@@ -304,52 +305,56 @@
 
 <body>
     <div class="header">
-        <h1>记录事件</h1>
+        <h1>Log Event</h1>
         <div style="display: flex; gap: 8px;">
-            <button class="edit-btn" onclick="syncWithServer()" title="与服务器同步">↻</button>
-            <button class="edit-btn" onclick="toggleEdit()">编辑</button>
+            <button class="edit-btn" onclick="syncWithServer()" title="Sync with server">↻</button>
+            <button class="edit-btn" onclick="toggleEdit()">Edit</button>
         </div>
     </div>
     <div class="grid" id="grid"></div>
-    <div class="footer"><a href="/">← 返回仪表盘</a></div>
-    <div id="toast">✅ 已记录！</div>
+    <div class="footer"><a href="/">← Dashboard</a></div>
+    <div id="toast">✅ Logged!</div>
     <div id="sync-toast"
         style="visibility: hidden; background: #3b82f6; color: #fff; text-align: center; border-radius: 50px; padding: 12px 24px; position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); font-weight: 600; z-index: 100;">
-        ↻ 已同步！</div>
+        ↻ Synced!</div>
 
-    <!-- 添加事件类型弹窗 -->
+    <!-- Add Event Modal -->
     <div class="modal" id="modal">
         <div class="modal-content">
-            <h2>添加事件类型</h2>
-            <label>名称</label>
-            <input type="text" id="eventName" placeholder="例如：跑步">
-            <label>来源 ID</label>
-            <input type="text" id="eventSource" placeholder="例如：running">
-            <label>表情</label>
+            <h2>Add Event Type</h2>
+            <label>Name</label>
+            <input type="text" id="eventName" placeholder="e.g., Exercise">
+            <label>Source ID</label>
+            <input type="text" id="eventSource" placeholder="e.g., exercise">
+            <label>Emoji</label>
             <div class="emoji-picker" id="emojiPicker"></div>
-            <label>颜色</label>
+            <label>Color</label>
             <div class="color-picker" id="colorPicker"></div>
             <div class="modal-buttons">
-                <button class="btn-cancel" onclick="closeModal()">取消</button>
-                <button class="btn-save" onclick="saveEvent()">添加</button>
+                <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="btn-save" onclick="saveEvent()">Add</button>
             </div>
         </div>
     </div>
 
     <script>
+        // Known presets for auto-discovery
         const presets = {
             'git': { name: 'Git', emoji: '💻', color: '#238636' },
             'github-import': { name: 'GitHub', emoji: '🐙', color: '#238636' },
             'gitlab-import': { name: 'GitLab', emoji: '🦊', color: '#3B82F6' },
-            'coffee': { name: '喝咖啡', emoji: '☕', color: '#8B4513' }
+            'coffee': { name: 'Coffee', emoji: '☕', color: '#8B4513' }
         };
 
+        // Default event types (fallback)
         const defaultEvents = [
-            { id: 'coffee', name: '喝咖啡', emoji: '☕', color: '#8B4513', context: 'manual' }
+            { id: 'coffee', name: 'Coffee', emoji: '☕', color: '#8B4513', context: 'manual' }
         ];
 
+        // Available emojis
         const emojis = ['☕', '🏃', '📚', '🧠', '💡', '🧘', '🎓', '💪', '🎯', '✍️', '🎵', '🌱', '💻', '🐙', '📱'];
 
+        // Available colors
         const colors = [
             '#8B4513', '#238636', '#f97316', '#eab308',
             '#3b82f6', '#a855f7', '#ec4899', '#ef4444',
@@ -360,6 +365,7 @@
         let selectedEmoji = emojis[0];
         let selectedColor = colors[0];
 
+        // Load events from localStorage or use defaults
         function loadEvents() {
             const saved = localStorage.getItem('loggerEvents');
             if (saved) {
@@ -368,12 +374,14 @@
             return defaultEvents;
         }
 
+        // Save events to localStorage
         function saveEvents(events) {
             localStorage.setItem('loggerEvents', JSON.stringify(events));
         }
 
+        // Sync with server sources
         async function syncWithServer() {
-            const btn = document.querySelector('button[title="与服务器同步"]');
+            const btn = document.querySelector('button[title="Sync with server"]');
             btn.style.animation = 'spin 1s linear infinite';
 
             try {
@@ -385,6 +393,7 @@
                 const localEvents = loadEvents();
                 let changed = false;
 
+                // Add missing sources from server
                 serverSources.forEach(source => {
                     if (!localEvents.find(e => e.id === source)) {
                         const preset = presets[source] || {
@@ -409,6 +418,7 @@
                     render();
                 }
 
+                // Show sync toast
                 const t = document.getElementById('sync-toast');
                 t.style.visibility = 'visible';
                 t.style.animation = 'fade 2s forwards';
@@ -416,12 +426,13 @@
 
             } catch (e) {
                 console.error('Sync failed:', e);
-                alert('同步失败：无法连接服务器');
+                alert('Sync failed: Could not reach server');
             } finally {
                 btn.style.animation = 'none';
             }
         }
 
+        // Render the event buttons
         function render() {
             const grid = document.getElementById('grid');
             const events = loadEvents();
@@ -435,11 +446,12 @@
                 </button>
             `).join('');
 
+            // Add the "+" button when editing
             if (isEditing) {
                 grid.innerHTML += `
                     <button class="btn add-btn" onclick="openModal()">
                         <span class="emoji">+</span>
-                        新增
+                        Add New
                     </button>
                 `;
             }
@@ -447,6 +459,7 @@
             document.body.classList.toggle('editing', isEditing);
         }
 
+        // Adjust color brightness
         function adjustColor(hex, percent) {
             const num = parseInt(hex.slice(1), 16);
             const r = Math.min(255, Math.max(0, (num >> 16) + percent));
@@ -455,16 +468,18 @@
             return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
         }
 
+        // Toggle edit mode
         function toggleEdit() {
             isEditing = !isEditing;
-            const btn = document.querySelectorAll('.edit-btn')[1];
+            const btn = document.querySelectorAll('.edit-btn')[1]; // The second button is Edit
             btn.classList.toggle('active', isEditing);
-            btn.textContent = isEditing ? '完成' : '编辑';
+            btn.textContent = isEditing ? 'Done' : 'Edit';
             render();
         }
 
+        // Delete an event
         function deleteEvent(index) {
-            if (confirm('确定删除这个事件类型吗？')) {
+            if (confirm('Delete this event type?')) {
                 const events = loadEvents();
                 events.splice(index, 1);
                 saveEvents(events);
@@ -472,6 +487,7 @@
             }
         }
 
+        // Open add modal
         function openModal() {
             document.getElementById('modal').classList.add('show');
             document.getElementById('eventName').value = '';
@@ -480,10 +496,12 @@
             renderColorPicker();
         }
 
+        // Close modal
         function closeModal() {
             document.getElementById('modal').classList.remove('show');
         }
 
+        // Render emoji picker
         function renderEmojiPicker() {
             const picker = document.getElementById('emojiPicker');
             picker.innerHTML = emojis.map(e => `
@@ -492,6 +510,7 @@
             `).join('');
         }
 
+        // Render color picker
         function renderColorPicker() {
             const picker = document.getElementById('colorPicker');
             picker.innerHTML = colors.map(c => `
@@ -500,22 +519,25 @@
             `).join('');
         }
 
+        // Select emoji
         function selectEmoji(emoji) {
             selectedEmoji = emoji;
             renderEmojiPicker();
         }
 
+        // Select color
         function selectColor(color) {
             selectedColor = color;
             renderColorPicker();
         }
 
+        // Save new event
         function saveEvent() {
             const name = document.getElementById('eventName').value.trim();
             const source = document.getElementById('eventSource').value.trim().toLowerCase().replace(/\s+/g, '-');
 
             if (!name || !source) {
-                alert('请填写完整信息');
+                alert('Please fill in all fields');
                 return;
             }
 
@@ -532,6 +554,7 @@
             render();
         }
 
+        // Log an event
         function log(source, context) {
             if (isEditing) return;
             if (navigator.vibrate) navigator.vibrate(50);
@@ -547,15 +570,17 @@
                 }])
             }).then(r => {
                 if (r.ok) toast();
-            }).catch(() => alert('连接失败'));
+            }).catch(() => alert('Connection error'));
         }
 
+        // Show toast
         function toast() {
             const t = document.getElementById('toast');
             t.classList.add('show');
             setTimeout(() => t.classList.remove('show'), 2000);
         }
 
+        // Initialize
         render();
         syncWithServer();
     </script>
