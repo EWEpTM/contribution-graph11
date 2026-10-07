@@ -125,7 +125,7 @@
         }
         .graph-header {
             position: relative;
-            z-index: 2; /* 下拉在上 */
+            z-index: 2;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -164,14 +164,12 @@
         }
         select:focus { outline: none; border-color: var(--green); }
 
-        /* 日历居中 + 响应式 */
         .heatmap-wrap {
-        position: relative;
-        z-index: 1;
-        overflow-x: auto;
-        overflow-y: visible; /* 避免纵向裁切 tooltip（若仍用默认挂载方式） */
-            width: 100%;
+            position: relative;
+            z-index: 1;
             overflow-x: auto;
+            overflow-y: visible;
+            width: 100%;
             -webkit-overflow-scrolling: touch;
             display: flex;
             justify-content: center;
@@ -284,18 +282,15 @@
 </div>
 
 <script>
-/* ========== 颜色与名称 ========== */
-const PRESETS = {
+const DEFAULT_PRESETS = {
     'git':            { rgb: '35,134,54',  hex: '#238636', name: 'Git 提交' },
     'github-import':  { rgb: '35,134,54',  hex: '#238636', name: 'GitHub' },
     'gitlab-import':  { rgb: '59,130,246', hex: '#3B82F6', name: 'GitLab' },
     'coffee':         { rgb: '139,69,19',  hex: '#8B4513', name: '喝咖啡' },
-    'fitness':        { rgb: '249,115,22', hex: '#f97316', name: '运动' },
-    'reading':        { rgb: '234,179,8',  hex: '#eab308', name: '阅读' },
-    'meditation':     { rgb: '168,85,247', hex: '#a855f7', name: '冥想' },
-    'learning':       { rgb: '236,72,153', hex: '#ec4899', name: '学习' },
     'default':        { rgb: '139,148,158',hex: '#8b949e', name: '其他' }
 };
+
+let sourceColors = { ...DEFAULT_PRESETS };
 
 function hexToRgb(hex) {
     if (!hex || !hex.startsWith('#')) return '139,148,158';
@@ -304,29 +299,45 @@ function hexToRgb(hex) {
     return `${(n>>16)&255},${(n>>8)&255},${n&255}`;
 }
 
-/** 合并预设 + 手机端 localStorage 自定义事件 */
-function loadSourceColors() {
-    const map = { ...PRESETS };
+async function loadSourceColorsFromDB() {
+    const map = { ...DEFAULT_PRESETS };
     try {
-        const saved = localStorage.getItem('loggerEvents');
-        if (saved) {
-            JSON.parse(saved).forEach(e => {
-                if (!e.id) return;
-                map[e.id] = {
-                    rgb: hexToRgb(e.color),
-                    hex: e.color || '#8b949e',
-                    name: e.name || e.id
-                };
-            });
+        const res = await fetch('/api/sources');
+        if (res.ok) {
+            const list = await res.json();
+            if (Array.isArray(list)) {
+                list.forEach(e => {
+                    if (!e.id) return;
+                    map[e.id] = {
+                        rgb: hexToRgb(e.color),
+                        hex: e.color || '#8b949e',
+                        name: e.name || e.id
+                    };
+                });
+            }
         }
-    } catch (_) {}
-    return map;
+    } catch (e) {
+        console.warn('Failed to load sources from database, using defaults');
+    }
+    sourceColors = map;
 }
 
-let sourceColors = loadSourceColors();
-
 function getColor(id) {
-    return sourceColors[id] || sourceColors.default;
+    if (!sourceColors[id]) {
+        // 安全兜底：遇到未知来源自动生成稳定颜色，绝不变灰
+        let hash = 0;
+        for (let i = 0; i < id.length; i++) {
+            hash = id.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const c = Math.abs(hash).toString(16);
+        const hex = '#' + '000000'.substring(0, 6 - c.length) + c;
+        sourceColors[id] = {
+            rgb: hexToRgb(hex),
+            hex: hex,
+            name: id
+        };
+    }
+    return sourceColors[id];
 }
 
 /* ========== 状态 ========== */
@@ -339,7 +350,8 @@ let chart = null;
 
 /* ========== 初始化 ========== */
 async function init() {
-    // 年份
+    await loadSourceColorsFromDB();
+
     const yearSel = document.getElementById('year');
     const cy = new Date().getFullYear();
     for (let y = cy; y >= cy - 5; y--) {
@@ -352,7 +364,6 @@ async function init() {
         render();
     };
 
-    // 合并模式
     const modeSel = document.getElementById('combineMode');
     modeSel.value = combineMode;
     modeSel.onchange = () => {
@@ -365,9 +376,8 @@ async function init() {
     await loadData();
     render();
 
-    // 定时刷新
     setInterval(async () => {
-        sourceColors = loadSourceColors();
+        await loadSourceColorsFromDB();
         await loadStats();
         await loadData();
         render();
@@ -394,7 +404,6 @@ async function loadData() {
 
 /* ========== 渲染 ========== */
 function render() {
-    sourceColors = loadSourceColors();
     renderTabs();
     renderStats();
     renderHeatmap();
@@ -406,7 +415,6 @@ function renderTabs() {
         bySource[c.source] = (bySource[c.source] || 0) + 1;
     });
 
-    // 若当前选中的 source 已不存在，回到 combined
     if (currentSource !== 'combined' && !bySource[currentSource]) {
         currentSource = 'combined';
         localStorage.setItem('dashboard_source', 'combined');
@@ -415,11 +423,9 @@ function renderTabs() {
     const tabs = document.getElementById('sourceTabs');
     let html = '';
 
-    // Combined
     const total = allData.length;
     html += tabHtml('combined', '全部', total, 'linear-gradient(135deg,#238636,#3b82f6)');
 
-    // 各来源（按数量排序）
     Object.entries(bySource)
         .sort((a, b) => b[1] - a[1])
         .forEach(([id, cnt]) => {
@@ -429,7 +435,6 @@ function renderTabs() {
 
     tabs.innerHTML = html;
 
-    // 绑定点击
     tabs.querySelectorAll('.source-tab').forEach(el => {
         el.onclick = () => {
             currentSource = el.dataset.id;
@@ -451,7 +456,6 @@ function tabHtml(id, name, count, color) {
 function renderStats() {
     const bySource = statsData.by_source || {};
 
-    // 本地今天的日期字符串 YYYY-MM-DD
     const now = new Date();
     const todayStr = [
         now.getFullYear(),
@@ -464,7 +468,6 @@ function renderStats() {
         total = allData.length;
         today = allData.filter(c => {
             const t = c.timestamp || '';
-            // 兼容 "2026-10-07T..." 和纯日期
             const d = t.slice(0, 10);
             return d === todayStr;
         }).length;
@@ -485,17 +488,14 @@ function renderHeatmap() {
     const modeSel = document.getElementById('combineMode');
     modeSel.style.display = isCombined ? '' : 'none';
 
-    // 标题徽章
     const c = isCombined
         ? { hex: 'linear-gradient(135deg,#238636,#3b82f6)', name: '全部' }
         : getColor(currentSource);
     document.getElementById('badgeDot').style.background = typeof c.hex === 'string' && c.hex.startsWith('#') ? c.hex : '#238636';
     document.getElementById('badgeName').textContent = c.name || currentSource;
 
-    // 过滤数据
     const data = isCombined ? allData : allData.filter(x => x.source === currentSource);
 
-    // 按天聚合
     const days = {};
     data.forEach(item => {
         const dt = (item.timestamp || '').split('T')[0];
@@ -525,7 +525,6 @@ function renderHeatmap() {
         };
     });
 
-    // 图例
     const legendColor = isCombined ? getColor('git') : getColor(currentSource);
     document.getElementById('legend').innerHTML = `
         <div class="legend-item"><div class="legend-box" style="background:#161b22"></div>无</div>
@@ -535,7 +534,6 @@ function renderHeatmap() {
         <div class="legend-item"><div class="legend-box" style="background:${legendColor.hex}"></div>多</div>
     `;
 
-    // 尺寸：根据容器宽度自适应
     const el = document.getElementById('heatmap');
     const wrap = el.parentElement;
     const avail = wrap.clientWidth || 800;
@@ -553,16 +551,14 @@ function renderHeatmap() {
     chart.setOption({
         backgroundColor: 'transparent',
         tooltip: {
-            appendToBody: true,   // ECharts 5：挂到 body，不被卡片裁切
-            confine: false,       // 不限制在图表区域内
+            appendToBody: true,
+            confine: false,
             extraCssText: 'z-index: 9999; pointer-events: none;',
-           position: function (point, params, dom, rect, size) {
-           // point: 鼠标位置；尽量显示在格子上方，避免和下拉重叠
-           const x = point[0];
-           const y = point[1] - size.contentSize[1] - 12;
-           return [x, Math.max(8, y)];
-           },
-
+            position: function (point, params, dom, rect, size) {
+                const x = point[0];
+                const y = point[1] - size.contentSize[1] - 12;
+                return [x, Math.max(8, y)];
+            },
             formatter: p => {
                 if (!p.data || !p.data.value) return '';
                 const date = p.data.value[0];
@@ -581,22 +577,22 @@ function renderHeatmap() {
                 return tip;
             }
         },
-calendar: {
-    top: 20,
-    left: leftPad,
-    right: rightPad,
-    cellSize: [cellSize, cellSize],
-    range: year.toString(),
-    itemStyle: { color: '#161b22', borderColor: '#0d1117', borderWidth: 1 },
-    splitLine: { show: false },
-    yearLabel: { show: false },
-    dayLabel: {
-        color: '#8b949e',
-        firstDay: 1,
-        nameMap: ['日', '一', '二', '三', '四', '五', '六']
-    },
-    monthLabel: { color: '#8b949e', fontSize: isMobile ? 10 : 12 }
-},
+        calendar: {
+            top: 20,
+            left: leftPad,
+            right: rightPad,
+            cellSize: [cell, cell],
+            range: year.toString(),
+            itemStyle: { color: '#161b22', borderColor: '#0d1117', borderWidth: 1 },
+            splitLine: { show: false },
+            yearLabel: { show: false },
+            dayLabel: {
+                color: '#8b949e',
+                firstDay: 1,
+                nameMap: ['日', '一', '二', '三', '四', '五', '六']
+            },
+            monthLabel: { color: '#8b949e', fontSize: isMobile ? 10 : 12 }
+        },
         series: {
             type: 'heatmap',
             coordinateSystem: 'calendar',
@@ -624,7 +620,6 @@ function getCombinedColor(stats) {
         const opacity = Math.min(1, Math.max(0.3, stats.total / 12));
         return `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${opacity})`;
     }
-    // stack
     const sc = getColor('git');
     const opacity = Math.min(1, Math.max(0.3, stats.total / 18));
     return `rgba(${sc.rgb},${opacity})`;

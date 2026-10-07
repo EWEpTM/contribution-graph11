@@ -22,6 +22,13 @@ type Contribution struct {
     LocalDate string          `json:"local_date,omitempty"`
 }
 
+type EventSourceConfig struct {
+    ID    string `json:"id"`
+    Name  string `json:"name"`
+    Emoji string `json:"emoji"`
+    Color string `json:"color"`
+}
+
 var db *sql.DB
 var appLocation *time.Location
 
@@ -73,6 +80,13 @@ func main() {
     );
     CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
     CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
+
+    CREATE TABLE IF NOT EXISTS sources_config (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        emoji TEXT NOT NULL,
+        color TEXT NOT NULL
+    );
     `
 
     if _, err = db.Exec(createTableSQL); err != nil {
@@ -102,7 +116,7 @@ func main() {
     fmt.Println("   Dashboard: /")
     fmt.Println("   Mobile:    /mobile.html")
     fmt.Println("   API:       POST /api/contributions")
-    fmt.Println("   Delete:    DELETE /api/sources?source=<id>")
+    fmt.Println("   Sources:   GET/POST/DELETE /api/sources")
     log.Fatal(http.ListenAndServe(":"+port, handler))
 }
 
@@ -166,7 +180,6 @@ func handlePostContribution(w http.ResponseWriter, r *http.Request) {
             metaString = "{}"
         }
 
-        // 前端传来的一般是 UTC；转到 Docker/应用时区后存本地墙钟
         localTs := c.Timestamp.In(appLocation)
         localStr := localTs.Format("2006-01-02 15:04:05")
 
@@ -189,7 +202,7 @@ func handlePostContribution(w http.ResponseWriter, r *http.Request) {
     fmt.Printf("📥 Received %d events (from %d submitted)\n", count, len(contributions))
 }
 
-// GET: 读出后按应用时区解释，JSON 带 +08:00，前端 slice 日期即本地日
+// GET: 读出后按应用时区解释
 func handleGetContributions(w http.ResponseWriter, r *http.Request) {
     year := r.URL.Query().Get("year")
     source := r.URL.Query().Get("source")
@@ -236,7 +249,6 @@ func handleGetContributions(w http.ResponseWriter, r *http.Request) {
             continue
         }
 
-        // SQLite 读出的 naive 时间按应用时区解释（不要当成 UTC）
         c.Timestamp = time.Date(
             ts.Year(), ts.Month(), ts.Day(),
             ts.Hour(), ts.Minute(), ts.Second(), ts.Nanosecond(),
@@ -282,7 +294,6 @@ func handleGetStats(w http.ResponseWriter, r *http.Request) {
 
     stats["current_streak"] = calculateStreak()
 
-    // 今日：按应用时区的日历日，不用 UTC 的 date('now')
     todayStr := time.Now().In(appLocation).Format("2006-01-02")
     var today int
     db.QueryRow(`
@@ -297,37 +308,100 @@ func handleGetStats(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(stats)
 }
 
-// DELETE /api/sources?source=xxx
+// 统一处理来源配置的 GET, POST, DELETE
 func handleSources(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodOptions {
         w.WriteHeader(http.StatusOK)
         return
     }
-    if r.Method != http.MethodDelete {
+
+    switch r.Method {
+    case http.MethodGet:
+        rows, err := db.Query("SELECT id, name, emoji, color FROM sources_config")
+        if err != nil {
+            http.Error(w, err.Error(), http.StatusInternalServerError)
+            return
+        }
+        defer rows.Close()
+
+        var configs []EventSourceConfig
+        for rows.Next() {
+            var c EventSourceConfig
+            if err := rows.Scan(&c.ID, &c.Name, &c.Emoji, &c.Color); err == nil {
+                configs = append(configs, c)
+            }
+        }
+        if configs == nil {
+            configs = []EventSourceConfig{}
+        }
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(configs)
+
+    case http.MethodPost:
+        var c EventSourceConfig
+        if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
+            http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+            return
+        }
+        if c.ID == "" || c.Name == "" {
+            http.Error(w, "ID and Name are required", http.StatusBadRequest)
+            return
+        }
+        if c.Emoji == "" {
+            c.Emoji = "📱"
+        }
+        if c.Color == "" {
+            c.Color = "#8b949e"
+        }
+
+        _, err := db.Exec(`
+            INSERT INTO sources_config (id, name, emoji, color) VALUES (?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET name=excluded.name, emoji=excluded.emoji, color=excluded.color
+        `, c.ID, c.Name, c.Emoji, c.Color)
+
+        if err != nil {
+            http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+            return
+        }
+        w.WriteHeader(http.StatusOK)
+        json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+
+    case http.MethodDelete:
+        source := r.URL.Query().Get("source")
+        if source == "" {
+            http.Error(w, "missing source parameter", http.StatusBadRequest)
+            return
+        }
+
+        tx, err := db.Begin()
+        if err != nil {
+            http.Error(w, "Database error", http.StatusInternalServerError)
+            return
+        }
+
+        // 同时删除打卡事件和配置
+        resEvents, _ := tx.Exec(`DELETE FROM events WHERE source = ?`, source)
+        resConfig, _ := tx.Exec(`DELETE FROM sources_config WHERE id = ?`, source)
+
+        if err := tx.Commit(); err != nil {
+            http.Error(w, "Database error", http.StatusInternalServerError)
+            return
+        }
+
+        affectedEvents, _ := resEvents.RowsAffected()
+        affectedConfig, _ := resConfig.RowsAffected()
+
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "deleted_events": affectedEvents,
+            "deleted_config": affectedConfig,
+            "source":         source,
+        })
+        fmt.Printf("🗑️  Deleted source %q: %d events removed\n", source, affectedEvents)
+
+    default:
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-        return
     }
-
-    source := r.URL.Query().Get("source")
-    if source == "" {
-        http.Error(w, "missing source parameter", http.StatusBadRequest)
-        return
-    }
-
-    result, err := db.Exec(`DELETE FROM events WHERE source = ?`, source)
-    if err != nil {
-        http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
-        return
-    }
-
-    affected, _ := result.RowsAffected()
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]interface{}{
-        "deleted": affected,
-        "source":  source,
-        "message": fmt.Sprintf("Deleted %d events for source %q", affected, source),
-    })
-    fmt.Printf("🗑️  Deleted %d events for source %q\n", affected, source)
 }
 
 func calculateStreak() int {
@@ -357,7 +431,6 @@ func calculateStreak() int {
 
         if day.Equal(expectedDate) || day.Equal(expectedDate.AddDate(0, 0, -1)) {
             if day.Equal(expectedDate.AddDate(0, 0, -1)) && streak == 0 {
-                // 今天还没打卡，从昨天开始算连续
                 expectedDate = day
             }
             streak++
