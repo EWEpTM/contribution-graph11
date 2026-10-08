@@ -13,9 +13,23 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
     <title>Keep</title>
+    <script>
+    // 主题初始化：优先于 CSS 渲染执行，避免闪烁；默认跟随系统
+    (function () {
+        var p = localStorage.getItem('keep_theme') || 'system';
+        var eff = p;
+        if (p === 'system') {
+            eff = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+        }
+        document.documentElement.dataset.theme = eff;
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.setAttribute('content', eff === 'dark' ? '#0d1117' : '#ffffff');
+    })();
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
         :root {
+            color-scheme: dark;
             --bg: #0d1117;
             --bg2: #161b22;
             --bg3: #21262d;
@@ -27,9 +41,37 @@
             --blue: #3b82f6;
             --orange: #f97316;
             --danger: #f85149;
+            --accent: #58a6ff;
+            --overlay: rgba(0,0,0,0.75);
+            --modal-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            --toast-shadow: 0 4px 16px rgba(0,0,0,0.5);
+            --btn-glow: rgba(35,134,54,0.3);
+            --cell: #161b22;
+            --cell-border: #0d1117;
             --safe-bottom: env(safe-area-inset-bottom, 0px);
             --page-pad-x: clamp(0.5rem, 2vw, 2rem);
             --page-pad-y: clamp(0.6rem, 1.5vw, 2.5rem);
+        }
+        html[data-theme="light"] {
+            color-scheme: light;
+            --bg: #ffffff;
+            --bg2: #f6f8fa;
+            --bg3: #eaeef2;
+            --text: #1f2328;
+            --muted: #656d76;
+            --border: #d0d7de;
+            --green: #1a7f37;
+            --green-hover: #2da44e;
+            --blue: #0969da;
+            --orange: #d97706;
+            --danger: #cf222e;
+            --accent: #0969da;
+            --overlay: rgba(31,35,40,0.45);
+            --modal-shadow: 0 10px 30px rgba(140,149,159,0.35);
+            --toast-shadow: 0 4px 16px rgba(140,149,159,0.3);
+            --btn-glow: rgba(26,127,55,0.25);
+            --cell: #ebedf0;
+            --cell-border: #ffffff;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html { height: 100%; -webkit-text-size-adjust: 100%; }
@@ -57,7 +99,7 @@
             font-size: clamp(1.25rem, 2.5vw + 0.6rem, 2.2rem);
             font-weight: 700;
             margin: 0;
-            background: linear-gradient(135deg, #238636, #58a6ff);
+            background: linear-gradient(135deg, var(--green), var(--accent));
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -181,7 +223,7 @@
             display: inline-flex;
             align-items: center;
             gap: 0.3rem;
-            box-shadow: 0 2px 6px rgba(35,134,54,0.3);
+            box-shadow: 0 2px 6px var(--btn-glow);
         }
         .record-btn:hover { background: var(--green-hover); transform: translateY(-1px); }
         .record-btn:active { transform: scale(0.95); }
@@ -203,17 +245,42 @@
             width: 100%;
             -webkit-overflow-scrolling: touch;
             display: flex;
-            justify-content: center;
             align-items: center;
             flex: 1 1 auto;
             min-height: 0;
             padding-bottom: 2px;
+            scrollbar-width: none;
         }
+        .heatmap-wrap::-webkit-scrollbar { display: none; }
         #heatmap {
             min-width: 0;
+            flex-shrink: 0;
             -webkit-transform: translateZ(0);
             transform: translateZ(0);
         }
+        .hm-scrollbar {
+            position: relative;
+            display: none;
+            height: 8px;
+            margin-top: 10px;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            touch-action: none;
+            flex-shrink: 0;
+        }
+        .hm-scroll-thumb {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            min-width: 24px;
+            background: var(--green);
+            border-radius: 8px;
+            cursor: grab;
+        }
+        .hm-scroll-thumb:active { cursor: grabbing; }
         .legend {
             display: flex;
             justify-content: center;
@@ -233,13 +300,13 @@
             flex-shrink: 0;
             padding-top: 0.15rem;
         }
-        footer a { color: #58a6ff; text-decoration: none; }
+        footer a { color: var(--accent); text-decoration: none; }
         footer a:hover { color: var(--text); }
         .modal-overlay {
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,0.75);
+            background: var(--overlay);
             z-index: 1000;
             align-items: center;
             justify-content: center;
@@ -256,7 +323,7 @@
             max-width: min(420px, 94vw);
             max-height: min(90dvh, 90vh);
             overflow-y: auto;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            box-shadow: var(--modal-shadow);
             animation: modalFadeIn 0.2s ease-out;
         }
         @keyframes modalFadeIn {
@@ -304,7 +371,7 @@
             aspect-ratio: 1 / 1;
             text-align: center;
         }
-        .event-card:hover { border-color: #58a6ff; transform: translateY(-2px); }
+        .event-card:hover { border-color: var(--accent); transform: translateY(-2px); }
         .event-card:active { transform: scale(0.95); }
         .event-card .emoji { font-size: clamp(1.25rem, 3vw, 1.6rem); line-height: 1; }
 .event-card .name {
@@ -411,27 +478,57 @@
             z-index: 2000;
             font-size: 0.9rem;
             font-weight: 600;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+            box-shadow: var(--toast-shadow);
             transition: opacity 0.3s, visibility 0.3s;
             max-width: 90vw;
             text-align: center;
         }
         #toast.show { visibility: visible; opacity: 1; }
-        .page-dots {
-            display: none;
-            align-items: center;
-            gap: 6px;
-        }
-        .page-dots .dot {
-            width: 8px;
-            height: 8px;
+        .theme-fab {
+            position: fixed;
+            right: 20px;
+            bottom: calc(24px + var(--safe-bottom));
+            width: 46px;
+            height: 46px;
             border-radius: 50%;
-            background: var(--bg3);
+            background: var(--bg2);
             border: 1px solid var(--border);
+            box-shadow: 0 4px 14px var(--btn-glow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
             cursor: pointer;
-            transition: background 0.2s, border-color 0.2s;
+            z-index: 2100;
+            transition: transform 0.2s;
         }
-        .page-dots .dot.active { background: var(--green); border-color: var(--green); }
+        .theme-fab:hover { transform: translateY(-2px) scale(1.05); }
+        .theme-menu {
+            position: fixed;
+            right: 20px;
+            bottom: calc(80px + var(--safe-bottom));
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: var(--modal-shadow);
+            padding: 6px;
+            display: none;
+            flex-direction: column;
+            gap: 2px;
+            z-index: 2200;
+            min-width: 104px;
+        }
+        .theme-menu.show { display: flex; }
+        .theme-menu-item {
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: var(--text);
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .theme-menu-item:hover { background: var(--bg3); }
+        .theme-menu-item.active { background: var(--bg3); color: var(--green); font-weight: 600; }
         @media (min-width: 1440px) {
             .container { max-width: 1600px; }
         }
@@ -480,10 +577,6 @@
                 <button class="record-btn" id="recordBtn" onclick="handleRecordClick()">+ 记录</button>
             </div>
             <div style="display:flex;gap:0.5rem;align-items:center;">
-                <div class="page-dots" id="pageDots">
-                    <span class="dot" onclick="setNarrowPage(0)" title="上半年"></span>
-                    <span class="dot" onclick="setNarrowPage(1)" title="下半年"></span>
-                </div>
                 <select id="combineMode" style="display:none;" title="合并方式">
                     <option value="winner">热度</option>
                     <option value="blend">混合</option>
@@ -494,6 +587,9 @@
         </div>
         <div class="heatmap-wrap">
             <div id="heatmap"></div>
+        </div>
+        <div class="hm-scrollbar" id="hmScrollbar">
+            <div class="hm-scroll-thumb" id="hmScrollThumb"></div>
         </div>
         <div class="legend" id="legend"></div>
     </div>
@@ -546,6 +642,13 @@
             <button class="btn-modal btn-modal-confirm" onclick="confirmDelete()">删除</button>
         </div>
     </div>
+</div>
+
+<div class="theme-fab" id="themeFab" title="颜色模式"><span>💡</span></div>
+<div class="theme-menu" id="themeMenu">
+    <div class="theme-menu-item" data-theme-opt="system">系统</div>
+    <div class="theme-menu-item" data-theme-opt="light">浅色</div>
+    <div class="theme-menu-item" data-theme-opt="dark">深色</div>
 </div>
 
 <div id="toast">✅ 记录成功！</div>
@@ -621,6 +724,59 @@ function isIOSDevice() {
         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
+// ============ 主题切换 ============
+let themePref = localStorage.getItem('keep_theme') || 'system';
+
+function currentTheme() {
+    if (themePref === 'system') {
+        return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    }
+    return themePref;
+}
+
+function applyTheme() {
+    const eff = currentTheme();
+    document.documentElement.dataset.theme = eff;
+    const m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', eff === 'dark' ? '#0d1117' : '#ffffff');
+    // 主题变化需重建图表（ECharts 主题在 init 时生效）
+    if (chart) {
+        try { chart.dispose(); } catch (_) {}
+        chart = null;
+    }
+    if (allData) renderHeatmap();
+    updateThemeMenu();
+}
+
+function setThemePref(p) {
+    themePref = p;
+    localStorage.setItem('keep_theme', p);
+    applyTheme();
+}
+
+function updateThemeMenu() {
+    const items = document.querySelectorAll('.theme-menu-item');
+    items.forEach(function (el) {
+        el.classList.toggle('active', el.dataset.themeOpt === themePref);
+    });
+}
+
+// ============ 热力图横向进度条 ============
+function syncScrollbar() {
+    const track = document.getElementById('hmScrollbar');
+    const thumb = document.getElementById('hmScrollThumb');
+    const wrap = document.querySelector('.heatmap-wrap');
+    if (!track || !thumb || !wrap) return;
+    const maxScroll = wrap.scrollWidth - wrap.clientWidth;
+    if (maxScroll <= 0) { track.style.display = 'none'; return; }
+    track.style.display = 'block';
+    const tw = track.clientWidth;
+    const thw = thumb.offsetWidth;
+    const p = wrap.scrollLeft / maxScroll;
+    thumb.style.left = Math.round(p * (tw - thw)) + 'px';
+}
+
+// ============ 初始化 ============
 async function init() {
     await loadSourceColorsFromDB();
     const yearSel = document.getElementById('year');
@@ -632,7 +788,6 @@ async function init() {
     yearSel.onchange = async () => {
         year = parseInt(yearSel.value);
         localStorage.setItem('dashboard_year', year);
-        narrowPage = 0;
         await loadData();
         render();
     };
@@ -643,44 +798,100 @@ async function init() {
         localStorage.setItem('dashboard_combine_mode', combineMode);
         renderHeatmap();
     };
+
+    // 主题按钮与菜单
+    const fab = document.getElementById('themeFab');
+    const menu = document.getElementById('themeMenu');
+    fab.addEventListener('click', function (e) {
+        e.stopPropagation();
+        menu.classList.toggle('show');
+    });
+    document.addEventListener('click', function (e) {
+        if (!menu.contains(e.target) && !fab.contains(e.target)) menu.classList.remove('show');
+    });
+    menu.querySelectorAll('.theme-menu-item').forEach(function (el) {
+        el.addEventListener('click', function () { setThemePref(el.dataset.themeOpt); menu.classList.remove('show'); });
+    });
+    // 跟随系统主题变化
+    const mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+    const onSysChange = function () { if (themePref === 'system') applyTheme(); };
+    if (mq && mq.addEventListener) mq.addEventListener('change', onSysChange);
+    else if (mq && mq.addListener) mq.addListener(onSysChange);
+    updateThemeMenu();
+
     await loadStats();
     await loadData();
     render();
+
+    // 热力图横向滚动：进度条同步 + 拖拽/点击 + 滚轮横向
+    const heatWrap = document.querySelector('.heatmap-wrap');
+    const track = document.getElementById('hmScrollbar');
+    const thumb = document.getElementById('hmScrollThumb');
+    if (heatWrap && track && thumb) {
+        heatWrap.addEventListener('scroll', function () {
+            if (window.__sbRaf) return;
+            window.__sbRaf = requestAnimationFrame(function () { window.__sbRaf = 0; syncScrollbar(); });
+        });
+        heatWrap.addEventListener('wheel', function (e) {
+            if (heatWrap.scrollWidth <= heatWrap.clientWidth) return;
+            if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) return;
+            heatWrap.scrollLeft += e.deltaY;
+            e.preventDefault();
+        }, { passive: false });
+        track.addEventListener('pointerdown', function (e) {
+            const tw = track.clientWidth - thumb.offsetWidth;
+            const wrap = heatWrap;
+            if (e.target === thumb) {
+                const startX = e.clientX;
+                const startLeft = thumb.offsetLeft;
+                const move = function (ev) {
+                    let nl = startLeft + (ev.clientX - startX);
+                    nl = Math.max(0, Math.min(tw, nl));
+                    thumb.style.left = nl + 'px';
+                    wrap.scrollLeft = (nl / tw) * (wrap.scrollWidth - wrap.clientWidth);
+                };
+                const up = function () {
+                    document.removeEventListener('pointermove', move);
+                    document.removeEventListener('pointerup', up);
+                };
+                document.addEventListener('pointermove', move);
+                document.addEventListener('pointerup', up);
+            } else {
+                const rect = track.getBoundingClientRect();
+                let nl = e.clientX - rect.left - thumb.offsetWidth / 2;
+                nl = Math.max(0, Math.min(tw, nl));
+                thumb.style.left = nl + 'px';
+                wrap.scrollLeft = (nl / tw) * (wrap.scrollWidth - wrap.clientWidth);
+            }
+            e.preventDefault();
+        });
+    }
+
+    // 详情弹窗：点击遮罩关闭；触摸滑动关闭（在记录列表内滑动不触发，可正常滚动列表）
+    const detailOv = document.getElementById('detailModal');
+    detailOv.addEventListener('click', function (e) { if (e.target === detailOv) closeDetailModal(); });
+    let dt = null;
+    detailOv.addEventListener('touchstart', function (e) {
+        dt = {
+            x: e.touches[0].clientX,
+            y: e.touches[0].clientY,
+            inList: !!(e.target && e.target.closest && e.target.closest('#detailList'))
+        };
+    }, { passive: true });
+    detailOv.addEventListener('touchend', function (e) {
+        if (!dt) return;
+        const dx = e.changedTouches[0].clientX - dt.x;
+        const dy = e.changedTouches[0].clientY - dt.y;
+        if ((Math.abs(dx) > 40 || Math.abs(dy) > 40) && !dt.inList) closeDetailModal();
+        dt = null;
+    }, { passive: true });
+
     setInterval(async () => {
         await loadSourceColorsFromDB();
         await loadStats();
         await loadData();
         render();
     }, 30000);
-
-    // 窄屏左右滑动切换月份分页
-    const heatWrap = document.querySelector('.heatmap-wrap');
-    if (heatWrap) {
-        let swipeX = 0, swipeY = 0, swiping = false;
-        heatWrap.addEventListener('touchstart', function (e) {
-            swipeX = e.touches[0].clientX;
-            swipeY = e.touches[0].clientY;
-            swiping = false;
-        }, { passive: true });
-        heatWrap.addEventListener('touchmove', function (e) {
-            const dx = e.touches[0].clientX - swipeX;
-            const dy = e.touches[0].clientY - swipeY;
-            if (!swiping && Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) swiping = true;
-        }, { passive: true });
-        heatWrap.addEventListener('touchend', function (e) {
-            if (!swiping) return;
-            const dx = e.changedTouches[0].clientX - swipeX;
-            if (Math.abs(dx) < 40) return;
-            if (window.innerWidth >= 640) return;
-            const dir = dx < 0 ? 1 : -1;
-            const np = Math.max(0, Math.min(1, narrowPage + dir));
-            if (np !== narrowPage) {
-                narrowPage = np;
-                suppressClickUntil = Date.now() + 500;
-                renderHeatmap();
-            }
-        }, { passive: true });
-    }
 }
 
 async function loadStats() {
@@ -791,15 +1002,7 @@ function fmtTime(t) {
     return t;
 }
 
-function pad2(n) { return n < 10 ? '0' + n : '' + n; }
-
-// 窄屏月份分页：每页 6 个月（1-6 月 / 7-12 月）
-function getMonthRangeForPage(p) {
-    const start = 1 + p * 6;
-    return [start, Math.min(12, start + 5)];
-}
-
-// 计算某月区间跨过的周列数（以周一为一周起点），用于窄屏格子尺寸
+// 计算某月区间跨过的周列数（以周一为一周起点），用于自适应格子尺寸
 function weeksBetweenMonths(y, s, e) {
     const start = new Date(y, s - 1, 1);
     const end = new Date(y, e, 0);
@@ -811,25 +1014,11 @@ function weeksBetweenMonths(y, s, e) {
     return Math.round((sunday - monday) / msPerDay / 7) + 1;
 }
 
-function setNarrowPage(p) {
-    if (narrowPage === p) return;
-    narrowPage = p;
-    renderHeatmap();
-}
-
-function updatePageDots() {
-    const dots = document.querySelectorAll('#pageDots .dot');
-    dots.forEach(function (d, i) { d.classList.toggle('active', i === narrowPage); });
-}
-
 let detailDate = null;
 let detailRecords = [];
 let pendingDeleteId = null;
-let narrowPage = 0;
-let suppressClickUntil = 0;
 
 function onHeatmapClick(params) {
-    if (Date.now() < suppressClickUntil) return; // 滑动翻页后抑制误触
     // 仅在具体事件视图下生效，全部视图点击不弹窗
     if (currentSource === 'combined') return;
     if (!params || !params.data || !params.data.value) return;
@@ -1004,6 +1193,13 @@ function renderHeatmap() {
         days[dt].src[item.source] = (days[dt].src[item.source] || 0) + 1;
     });
 
+    // canvas 不支持 CSS 变量，取计算后的颜色值
+    const cs = getComputedStyle(document.documentElement);
+    const cv = (n, fb) => { const v = cs.getPropertyValue(n).trim(); return v || fb; };
+    const cCell = cv('--cell', '#161b22');
+    const cCellBorder = cv('--cell-border', '#0d1117');
+    const cMuted = cv('--muted', '#8b949e');
+
     const chartData = Object.entries(days).map(([date, stats]) => {
         let color;
         if (isCombined) color = getCombinedColor(stats);
@@ -1016,13 +1212,13 @@ function renderHeatmap() {
         }
         return {
             value: [date, stats.total],
-            itemStyle: { color, borderColor: '#0d1117', borderWidth: 1, borderRadius: 2 }
+            itemStyle: { color, borderColor: cCellBorder, borderWidth: 1, borderRadius: 2 }
         };
     });
 
     const legendColor = isCombined ? { rgb: '35,134,54', hex: '#238636' } : getColor(currentSource);
     document.getElementById('legend').innerHTML = `
-        <div class="legend-item"><div class="legend-box" style="background:#161b22"></div>无</div>
+        <div class="legend-item"><div class="legend-box" style="background:${cCell}"></div>无</div>
         <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.35)"></div>少</div>
         <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.65)"></div>中</div>
         <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.85)"></div>较多</div>
@@ -1036,12 +1232,12 @@ function renderHeatmap() {
     const isNarrow = vw < 640;
     const isTablet = vw >= 640 && vw < 1024;
 
-    // 窄屏按月分页：每页 6 个月，左右滑动查看全年；桌面/平板显示全年
-    const [calStartMonth, calEndMonth] = isNarrow ? getMonthRangeForPage(narrowPage) : [1, 12];
-    const calCols = isNarrow ? weeksBetweenMonths(year, calStartMonth, calEndMonth) : 53;
-    const calRange = isNarrow
-        ? [year + '-' + pad2(calStartMonth), year + '-' + pad2(calEndMonth)]
-        : year.toString();
+    // 自适应可见月数：手机≥3个月、平板约6个月、中屏约8个月、桌面(≥1280)完整12个月
+    // 整年连续渲染不切断，超出可视区域时左右滑动 + 进度条查看
+    const targetMonths = vw < 640 ? 3 : vw < 1024 ? 6 : vw < 1280 ? 8 : 12;
+    const targetCols = weeksBetweenMonths(year, 1, targetMonths);
+    const calCols = 53;
+    const calRange = year.toString();
 
     void wrap.offsetWidth;
     let avail = wrap.clientWidth || vw;
@@ -1049,10 +1245,8 @@ function renderHeatmap() {
 
     const leftPad = isNarrow ? 18 : (isTablet ? 28 : 48);
     const rightPad = isNarrow ? 4 : (isTablet ? 12 : 24);
-    let cell = Math.floor((avail - leftPad - rightPad) / calCols);
-    if (isNarrow) cell = Math.max(8, Math.min(18, cell));
-    else if (isTablet) cell = Math.max(10, Math.min(18, cell));
-    else cell = Math.max(12, Math.min(30, cell));
+    let cell = Math.floor((avail - leftPad - rightPad) / targetCols);
+    cell = Math.max(10, Math.min(26, cell));
 
     const usedOutside =
         (document.querySelector('h1')?.offsetHeight || 40) +
@@ -1062,29 +1256,27 @@ function renderHeatmap() {
         (document.getElementById('legend')?.offsetHeight || 28) +
         (document.querySelector('footer')?.offsetHeight || 28) + 80;
 
-    const maxGraphH = Math.max(110, Math.min(vh - usedOutside, isNarrow ? 160 : (isTablet ? 200 : 340)));
+    const maxGraphH = Math.max(110, Math.min(vh - usedOutside, isNarrow ? 300 : (isTablet ? 260 : 340)));
     let graphH = Math.round(cell * 7 + (isNarrow ? 36 : 48));
     if (graphH > maxGraphH) {
         graphH = maxGraphH;
         const cellByH = Math.floor((graphH - (isNarrow ? 36 : 48)) / 7);
-        if (cellByH > 0 && cellByH < cell) cell = Math.max(isNarrow ? 8 : 10, cellByH);
+        if (cellByH > 0 && cellByH < cell) cell = Math.max(10, cellByH);
     }
     const graphW = calCols * cell + leftPad + rightPad;
     el.style.width = graphW + 'px';
     el.style.height = graphH + 'px';
-
-    // 窄屏月份分页指示点
-    const pageDotsEl = document.getElementById('pageDots');
-    if (pageDotsEl) pageDotsEl.style.display = isNarrow ? 'flex' : 'none';
-    updatePageDots();
+    // 超出容器时左对齐以便横向滚动，未超出时居中
+    wrap.style.justifyContent = graphW > avail ? 'flex-start' : 'center';
 
     const draw = () => {
         if (chart && isIOSDevice()) {
             try { chart.dispose(); } catch (_) {}
             chart = null;
         }
+        const eTheme = (document.documentElement.dataset.theme === 'light') ? 'light' : 'dark';
         if (!chart) {
-            chart = echarts.init(el, 'dark', { width: graphW, height: graphH, renderer: 'canvas' });
+            chart = echarts.init(el, eTheme, { width: graphW, height: graphH, renderer: 'canvas' });
             chart.on('click', onHeatmapClick);
         } else {
             chart.resize({ width: graphW, height: graphH });
@@ -1123,21 +1315,22 @@ function renderHeatmap() {
                 right: rightPad,
                 cellSize: [cell, cell],
                 range: calRange,
-                itemStyle: { color: '#161b22', borderColor: '#0d1117', borderWidth: 1 },
+                itemStyle: { color: cCell, borderColor: cCellBorder, borderWidth: 1 },
                 splitLine: { show: false },
                 yearLabel: { show: false },
                 dayLabel: {
-                    color: '#8b949e', firstDay: 1,
+                    color: cMuted, firstDay: 1,
                     // nameMap 下标 = 星期几（0=周日）：周一/周三/周五显示 一/三/五，其余留空
                     nameMap: ['', '一', '', '三', '', '五', ''],
                     fontSize: labelSize
                 },
-                monthLabel: { color: '#8b949e', fontSize: monthSize }
+                monthLabel: { color: cMuted, fontSize: monthSize }
             },
             series: { type: 'heatmap', coordinateSystem: 'calendar', data: chartData }
         }, true);
         requestAnimationFrame(() => {
             if (chart && !chart.isDisposed()) chart.resize({ width: graphW, height: graphH });
+            syncScrollbar();
         });
     };
     requestAnimationFrame(draw);
