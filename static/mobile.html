@@ -96,7 +96,7 @@
             margin-bottom: 16px;
             color: #e6edf3;
         }
-        .modal input {
+        .modal input[type="text"] {
             width: 100%;
             padding: 12px;
             border: 1px solid #30363d;
@@ -106,7 +106,7 @@
             font-size: 1rem;
             margin-bottom: 12px;
         }
-        .modal input:focus {
+        .modal input[type="text"]:focus {
             outline: none;
             border-color: #238636;
         }
@@ -129,7 +129,7 @@
             display: grid;
             grid-template-columns: repeat(6, 1fr);
             gap: 8px;
-            margin-bottom: 16px;
+            margin-bottom: 12px;
         }
         .emoji-option {
             font-size: 1.5rem;
@@ -152,6 +152,30 @@
             border: 2px solid transparent;
         }
         .color-option.selected { border-color: #fff; }
+
+        /* 自定义 HEX 颜色选择器容器 */
+        .custom-color-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .custom-color-row input[type="color"] {
+            width: 44px;
+            height: 44px;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            background: #0d1117;
+            cursor: pointer;
+            padding: 2px;
+        }
+        .custom-color-row input[type="text"] {
+            flex: 1;
+            margin-bottom: 0;
+            font-family: monospace, monospace;
+            text-transform: uppercase;
+        }
+
         .modal-buttons {
             display: flex;
             gap: 12px;
@@ -243,15 +267,20 @@
             <label>表情</label>
             <div class="emoji-picker" id="emojiPicker"></div>
 
-            <label>颜色</label>
+            <label>颜色 (预设 / HEX自选)</label>
             <div class="color-picker" id="colorPicker"></div>
+            
+            <!-- 新增自定义 HEX 颜色选择行 -->
+            <div class="custom-color-row">
+                <input type="color" id="hexColorPicker" oninput="onCustomColorPickerChange(this.value)">
+                <input type="text" id="hexColorInput" placeholder="#238636" maxlength="7" oninput="onCustomHexInputChange(this.value)">
+            </div>
 
             <div class="modal-buttons">
                 <button class="btn-cancel" onclick="closeModal()">取消</button>
                 <button class="btn-save" id="saveBtn" onclick="saveEvent()">添加</button>
             </div>
 
-            <!-- 仅编辑模式显示删除 -->
             <button class="btn-delete" id="deleteBtn" style="display:none;" onclick="confirmDelete()">删除此事件类型</button>
         </div>
     </div>
@@ -335,9 +364,8 @@ function openAdd() {
     document.getElementById('eventSource').disabled = false;
     document.getElementById('sourceHint').textContent = '英文小写，保存后不可修改（对应打卡数据）';
     selectedEmoji = emojis[0];
-    selectedColor = colors[0];
+    updateColorState(colors[0]);
     renderEmojiPicker();
-    renderColorPicker();
     document.getElementById('modal').classList.add('show');
 }
 
@@ -354,9 +382,8 @@ function openEdit(index) {
     document.getElementById('eventSource').disabled = true;
     document.getElementById('sourceHint').textContent = '来源 ID 不可修改（与历史打卡数据绑定）';
     selectedEmoji = e.emoji || emojis[0];
-    selectedColor = e.color || colors[0];
+    updateColorState(e.color || colors[0]);
     renderEmojiPicker();
-    renderColorPicker();
     document.getElementById('modal').classList.add('show');
 }
 
@@ -370,13 +397,45 @@ function renderEmojiPicker() {
         `<div class="emoji-option ${e === selectedEmoji ? 'selected' : ''}" onclick="selectEmoji('${e}')">${e}</div>`
     ).join('');
 }
+
 function renderColorPicker() {
+    const cur = selectedColor.toLowerCase();
     document.getElementById('colorPicker').innerHTML = colors.map(c =>
-        `<div class="color-option ${c === selectedColor ? 'selected' : ''}" style="background:${c}" onclick="selectColor('${c}')"></div>`
+        `<div class="color-option ${c.toLowerCase() === cur ? 'selected' : ''}" style="background:${c}" onclick="selectColor('${c}')"></div>`
     ).join('');
 }
+
+function updateColorState(hex) {
+    selectedColor = hex;
+    const picker = document.getElementById('hexColorPicker');
+    const input = document.getElementById('hexColorInput');
+    
+    if (input) input.value = hex;
+    if (picker && /^#[0-9A-Fa-f]{6}$/.test(hex)) {
+        picker.value = hex;
+    }
+    renderColorPicker();
+}
+
 function selectEmoji(e) { selectedEmoji = e; renderEmojiPicker(); }
-function selectColor(c) { selectedColor = c; renderColorPicker(); }
+function selectColor(c) { updateColorState(c); }
+
+function onCustomColorPickerChange(val) {
+    updateColorState(val);
+}
+
+function onCustomHexInputChange(val) {
+    let hex = val.trim();
+    if (hex && !hex.startsWith('#')) {
+        hex = '#' + hex;
+    }
+    selectedColor = hex;
+    const picker = document.getElementById('hexColorPicker');
+    if (picker && /^#[0-9A-Fa-f]{6}$/.test(hex)) {
+        picker.value = hex;
+    }
+    renderColorPicker();
+}
 
 async function saveEvent() {
     const name = document.getElementById('eventName').value.trim();
@@ -396,6 +455,12 @@ async function saveEvent() {
             alert('该来源 ID 已存在');
             return;
         }
+    }
+
+    // 验证颜色 HEX 格式
+    if (!/^#[0-9A-Fa-f]{6}$/.test(selectedColor)) {
+        alert('请输入有效的 6 位 HEX 颜色值（例如：#238636）');
+        return;
     }
 
     const targetId = editingIndex >= 0 ? eventsList[editingIndex].id : source;
