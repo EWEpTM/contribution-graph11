@@ -28,11 +28,14 @@
             min-height: 100vh;
             padding: 1.5rem 1rem 2rem;
         }
+
+        /* 提升最大宽度，适应电脑大屏 */
         .container {
-            max-width: 960px;
+            max-width: 1320px;
             margin: 0 auto;
             width: 100%;
         }
+
         h1 {
             text-align: center;
             font-size: 1.75rem;
@@ -42,8 +45,10 @@
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
+            transition: all 0.3s;
         }
 
+        /* 来源 Tab */
         .source-tabs {
             display: flex;
             flex-wrap: wrap;
@@ -89,6 +94,7 @@
         }
         .source-tab.active .count { color: var(--text); }
 
+        /* 统计卡片 */
         .stats {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -101,6 +107,7 @@
             border-radius: 12px;
             padding: 1rem 0.75rem;
             text-align: center;
+            transition: all 0.2s;
         }
         .stat-val {
             font-size: 1.6rem;
@@ -115,11 +122,13 @@
             margin-top: 0.25rem;
         }
 
+        /* 热力图卡片 */
         .graph-card {
             background: var(--bg2);
             border: 1px solid var(--border);
             border-radius: 16px;
             padding: 1.25rem;
+            transition: all 0.2s;
         }
         .graph-header {
             position: relative;
@@ -152,11 +161,12 @@
             width: 8px; height: 8px; border-radius: 50%;
         }
 
+        /* 常驻记录按钮 */
         .record-btn {
             background: var(--green);
             color: #fff;
             border: none;
-            padding: 0.3rem 0.85rem;
+            padding: 0.35rem 0.95rem;
             border-radius: 16px;
             font-size: 0.85rem;
             font-weight: 600;
@@ -198,8 +208,8 @@
             padding-bottom: 4px;
         }
         #heatmap {
-            height: 170px;
             min-width: 0;
+            transition: height 0.2s;
         }
 
         .legend {
@@ -233,6 +243,7 @@
         }
         footer a:hover { color: var(--text); }
 
+        /* ========== 弹窗样式 ========== */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -253,7 +264,7 @@
             border-radius: 16px;
             padding: 20px;
             width: 100%;
-            max-width: 400px;
+            max-width: 420px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.6);
             animation: modalFadeIn 0.2s ease-out;
         }
@@ -383,13 +394,28 @@
             opacity: 1;
         }
 
+        /* 电脑大屏适配 (>=1024px) */
+        @media (min-width: 1024px) {
+            body { padding: 2.5rem 2rem 3rem; }
+            h1 { font-size: 2.2rem; margin-bottom: 2rem; }
+            .stats { gap: 1.25rem; margin-bottom: 1.75rem; }
+            .stat { padding: 1.3rem 1rem; }
+            .stat-val { font-size: 2.2rem; }
+            .stat-lbl { font-size: 0.8rem; }
+            .graph-card { padding: 1.75rem; }
+            .graph-title { font-size: 1.3rem; }
+            .source-tab { padding: 0.5rem 1rem; font-size: 0.95rem; }
+            .record-btn { padding: 0.45rem 1.1rem; font-size: 0.95rem; }
+        }
+
+        /* 手机移动端适配 (<=640px) */
         @media (max-width: 640px) {
             body { padding: 0.75rem 0.5rem 1.5rem; }
             h1 { font-size: 1.35rem; margin-bottom: 1rem; }
-            .stats { grid-template-columns: repeat(2, 1fr); }
+            .stats { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+            .stat { padding: 0.85rem 0.5rem; }
             .stat-val { font-size: 1.35rem; }
             .graph-card { padding: 0.85rem; }
-            #heatmap { height: 140px; }
             .source-tabs { gap: 0.35rem; padding: 0.5rem; }
             .source-tab { padding: 0.3rem 0.6rem; font-size: 0.78rem; }
             .custom-modal { padding: 16px; max-width: 92vw; }
@@ -833,12 +859,24 @@ function renderHeatmap() {
     const wrap = el.parentElement;
     const avail = wrap.clientWidth || 800;
     const isMobile = window.innerWidth < 640;
-    const cell = isMobile ? Math.max(9, Math.floor((avail - 30) / 53)) : Math.min(14, Math.floor((avail - 50) / 53));
-    const leftPad = isMobile ? 22 : 36;
-    const rightPad = isMobile ? 4 : 16;
+
+    // 根据页面可用宽度动态计算格子大小（取消原先电脑端 14px 限制，最高可扩展至 24px）
+    const leftPad = isMobile ? 22 : 42;
+    const rightPad = isMobile ? 4 : 20;
+
+    let cell = Math.floor((avail - leftPad - rightPad) / 53);
+    if (isMobile) {
+        cell = Math.max(9, cell);
+    } else {
+        cell = Math.max(12, Math.min(24, cell)); // 电脑端最小 12px，最大 24px
+    }
+
     const graphW = 53 * cell + leftPad + rightPad;
+    // 热力图高度随格子大小等比例放大
+    const graphH = Math.max(isMobile ? 130 : 170, cell * 8.5 + (isMobile ? 30 : 45));
+
     el.style.width = graphW + 'px';
-    el.style.height = (isMobile ? 130 : 170) + 'px';
+    el.style.height = graphH + 'px';
 
     if (chart) chart.dispose();
     chart = echarts.init(el, 'dark');
@@ -873,7 +911,7 @@ function renderHeatmap() {
             }
         },
         calendar: {
-            top: 20,
+            top: isMobile ? 20 : Math.max(26, cell * 1.5),
             left: leftPad,
             right: rightPad,
             cellSize: [cell, cell],
@@ -884,9 +922,13 @@ function renderHeatmap() {
             dayLabel: {
                 color: '#8b949e',
                 firstDay: 1,
-                nameMap: ['7', '1', '2', '3', '4', '5', '6']
+                nameMap: ['7', '1', '2', '3', '4', '5', '6'],
+                fontSize: Math.max(10, Math.floor(cell * 0.7)) // 文字随格子大小动态调整
             },
-            monthLabel: { color: '#8b949e', fontSize: isMobile ? 10 : 12 }
+            monthLabel: { 
+                color: '#8b949e', 
+                fontSize: Math.max(11, Math.floor(cell * 0.75)) 
+            }
         },
         series: {
             type: 'heatmap',
@@ -927,7 +969,7 @@ function getCombinedColor(stats) {
 
 window.addEventListener('resize', () => {
     clearTimeout(window.__rz);
-    window.__rz = setTimeout(() => { if (allData) renderHeatmap(); }, 200);
+    window.__rz = setTimeout(() => { if (allData) renderHeatmap(); }, 150);
 });
 
 init();
