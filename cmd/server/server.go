@@ -1,9 +1,9 @@
 package main
 
 import (
-	"crypto/hex"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -119,6 +119,7 @@ func main() {
 		log.Fatalf("Failed to create table: %v", err)
 	}
 
+	// 给旧数据库自动补充 is_low_freq 字段
 	db.Exec("ALTER TABLE sources_config ADD COLUMN is_low_freq INTEGER DEFAULT 0")
 
 	mux := http.NewServeMux()
@@ -145,6 +146,8 @@ func main() {
 	fmt.Println("   Dashboard: /")
 	fmt.Println("   Mobile:    /mobile.html")
 	fmt.Println("   Login:     /login.html")
+	fmt.Println("   API:       POST /api/contributions")
+	fmt.Println("   Sources:   GET/POST/DELETE /api/sources")
 	log.Fatal(http.ListenAndServe(":"+port, handler))
 }
 
@@ -165,7 +168,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 func authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 未开启密码保护则跳过验证
+		// 若未设置 AUTH_PASSWORD 环境变量，直接放行
 		if authPassword == "" {
 			next.ServeHTTP(w, r)
 			return
@@ -173,13 +176,13 @@ func authMiddleware(next http.Handler) http.Handler {
 
 		path := r.URL.Path
 
-		// 豁免登录页面与登录接口
+		// 豁免登录页面、登录接口和健康检查接口
 		if path == "/login.html" || path == "/api/login" || path == "/api/health" {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// 验证 Cookie
+		// 校验 Cookie
 		cookie, err := r.Cookie("auth_session")
 		isValid := (err == nil && cookie.Value == expectedToken)
 
@@ -223,7 +226,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 写入长效 Cookie（10年，除非手动清除）
+	// 写入长效 Cookie（10年，除非清理浏览器 Cookie）
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_session",
 		Value:    expectedToken,
@@ -300,6 +303,7 @@ func handlePostContribution(w http.ResponseWriter, r *http.Request) {
 		"processed": count,
 		"message":   fmt.Sprintf("Processed %d contributions", count),
 	})
+	fmt.Printf("📥 Received %d events (from %d submitted)\n", count, len(contributions))
 }
 
 func handleGetContributions(w http.ResponseWriter, r *http.Request) {
@@ -501,6 +505,7 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
 			"deleted_config": affectedConfig,
 			"source":         source,
 		})
+		fmt.Printf("🗑️  Deleted source %q: %d events removed\n", source, affectedEvents)
 
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
