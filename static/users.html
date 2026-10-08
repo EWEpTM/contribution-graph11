@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0d1117">
     <title>Keep - 用户管理</title>
+    <script>
+    // 主题初始化：与主页面同步（localStorage keep_theme），避免闪烁
+    (function () {
+        var p = localStorage.getItem('keep_theme') || 'system';
+        var eff = p;
+        if (p === 'system') {
+            eff = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+        }
+        document.documentElement.dataset.theme = eff;
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.setAttribute('content', eff === 'dark' ? '#0d1117' : '#ffffff');
+    })();
+    </script>
     <style>
         :root {
             --bg: #0d1117;
@@ -16,6 +29,17 @@
             --green: #238636;
             --danger: #f85149;
             --accent: #58a6ff;
+        }
+        html[data-theme="light"] {
+            --bg: #ffffff;
+            --bg2: #f6f8fa;
+            --bg3: #eaeef2;
+            --text: #1f2328;
+            --muted: #656d76;
+            --border: #d0d7de;
+            --green: #1a7f37;
+            --danger: #cf222e;
+            --accent: #0969da;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -44,7 +68,7 @@
         h1 {
             font-size: 1.35rem;
             font-weight: 700;
-            background: linear-gradient(135deg, #238636, #58a6ff);
+            background: linear-gradient(135deg, var(--green), var(--accent));
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -76,7 +100,7 @@
             font-size: 0.75rem;
             font-weight: 600;
         }
-        .badge-admin { background: rgba(88,166,255,0.15); color: #58a6ff; }
+        .badge-admin { background: rgba(88,166,255,0.15); color: var(--accent); }
         .badge-user { background: var(--bg3); color: var(--muted); }
         .btn-del {
             background: transparent;
@@ -221,7 +245,7 @@
                     '<td class="num">' + u.id + '</td>' +
                     '<td>' + esc(u.username) + (isSelf ? ' <span style="opacity:.6">(我)</span>' : '') + '</td>' +
                     '<td>' + roleBadge + '</td>' +
-                    '<td class="hide-sm">' + esc(u.created_at || '') + '</td>' +
+                    '<td class="hide-sm">' + esc(String(u.created_at || '').slice(0, 10)) + '</td>' +
                     '<td class="num">' + u.count + '</td>' +
                     '<td>' + delBtn + '</td></tr>';
             });
@@ -318,6 +342,54 @@
 
         loadUsers();
         loadConfig();
+    </script>
+    <script>
+    // 主题全局同步：主页面切换后本页实时跟随；系统模式跟随系统变化
+    (function () {
+        function applyFromStorage() {
+            var p = localStorage.getItem('keep_theme') || 'system';
+            var eff = p;
+            if (p === 'system') {
+                eff = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+            }
+            document.documentElement.dataset.theme = eff;
+            var m = document.querySelector('meta[name="theme-color"]');
+            if (m) m.setAttribute('content', eff === 'dark' ? '#0d1117' : '#ffffff');
+        }
+        window.addEventListener('storage', function (e) {
+            if (e.key === 'keep_theme') applyFromStorage();
+        });
+        var mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+        if (mq && mq.addEventListener) {
+            mq.addEventListener('change', function () {
+                if ((localStorage.getItem('keep_theme') || 'system') === 'system') applyFromStorage();
+            });
+        }
+    })();
+    </script>
+    <script>
+    // 主题全局同步：主页面切换后本页实时跟随；系统模式跟随系统变化
+    (function () {
+        function applyFromStorage() {
+            var p = localStorage.getItem('keep_theme') || 'system';
+            var eff = p;
+            if (p === 'system') {
+                eff = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+            }
+            document.documentElement.dataset.theme = eff;
+            var m = document.querySelector('meta[name="theme-color"]');
+            if (m) m.setAttribute('content', eff === 'dark' ? '#0d1117' : '#ffffff');
+        }
+        window.addEventListener('storage', function (e) {
+            if (e.key === 'keep_theme') applyFromStorage();
+        });
+        var mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+        if (mq && mq.addEventListener) {
+            mq.addEventListener('change', function () {
+                if ((localStorage.getItem('keep_theme') || 'system') === 'system') applyFromStorage();
+            });
+        }
+    })();
     </script>
 </body>
 </html>
