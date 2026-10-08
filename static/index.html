@@ -258,7 +258,7 @@
             border-radius: 16px;
             padding: 20px;
             width: 100%;
-            max-width: 480px;
+            max-width: 400px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.6);
             animation: modalFadeIn 0.2s ease-out;
         }
@@ -287,49 +287,59 @@
         }
         .modal-close:hover { color: var(--text); }
 
-        /* 两排滑动网格 */
+        /* 三列网格布局，最多展现约 5 排，多的向下滚动 */
         .event-scroll-wrap {
             display: grid;
-            grid-template-rows: repeat(2, minmax(50px, auto));
-            grid-auto-flow: column;
-            grid-auto-columns: minmax(130px, max-content);
+            grid-template-columns: repeat(3, 1fr);
             gap: 10px;
-            overflow-x: auto;
-            padding: 8px 2px;
-            cursor: grab;
+            max-height: 380px; /* 约 5 排正方形格子高度 */
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding: 6px 2px;
             user-select: none;
             -webkit-overflow-scrolling: touch;
         }
-        .event-scroll-wrap:active { cursor: grabbing; }
-        .event-scroll-wrap::-webkit-scrollbar { height: 6px; }
+        .event-scroll-wrap::-webkit-scrollbar { width: 6px; }
         .event-scroll-wrap::-webkit-scrollbar-thumb {
             background: var(--border);
             border-radius: 3px;
         }
         .event-scroll-wrap::-webkit-scrollbar-track { background: var(--bg); }
 
+        /* 正方形格子卡片 */
         .event-card {
             background: var(--bg3);
             border: 1px solid var(--border);
             border-radius: 12px;
-            padding: 10px 14px;
+            padding: 8px 4px;
             display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 8px;
+            justify-content: center;
+            gap: 6px;
             cursor: pointer;
             transition: all 0.15s;
-            white-space: nowrap;
+            aspect-ratio: 1 / 1; /* 强制保正方形 */
+            text-align: center;
         }
         .event-card:hover {
             border-color: #58a6ff;
             transform: translateY(-2px);
         }
-        .event-card:active { transform: scale(0.96); }
-        .event-card .emoji { font-size: 1.3rem; }
+        .event-card:active { transform: scale(0.95); }
+        .event-card .emoji { 
+            font-size: 1.6rem; 
+            line-height: 1;
+        }
         .event-card .name {
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             font-weight: 500;
             color: var(--text);
+            width: 100%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding: 0 2px;
         }
 
         .modal-actions {
@@ -390,6 +400,10 @@
             #heatmap { height: 140px; }
             .source-tabs { gap: 0.35rem; padding: 0.5rem; }
             .source-tab { padding: 0.3rem 0.6rem; font-size: 0.78rem; }
+            .custom-modal { padding: 16px; max-width: 92vw; }
+            .event-scroll-wrap { gap: 8px; max-height: 320px; }
+            .event-card .emoji { font-size: 1.3rem; }
+            .event-card .name { font-size: 0.75rem; }
         }
     </style>
 </head>
@@ -452,7 +466,7 @@
     </footer>
 </div>
 
-<!-- 自定义弹窗 1：选择事件弹窗 (两排左右滑动/拖拽) -->
+<!-- 自定义弹窗 1：选择事件弹窗 (3列正方形网格/向下滚动) -->
 <div class="modal-overlay" id="selectModal">
     <div class="custom-modal">
         <div class="modal-header">
@@ -571,8 +585,6 @@ async function init() {
         renderHeatmap();
     };
 
-    initMouseDragScroll();
-
     await loadStats();
     await loadData();
     render();
@@ -619,7 +631,7 @@ function openSelectEventModal() {
     const keys = Object.keys(sourceColors).filter(k => k !== 'default');
     
     if (keys.length === 0) {
-        container.innerHTML = '<div style="color:var(--muted);padding:10px;">暂无可用事件，请先在事件页面配置。</div>';
+        container.innerHTML = '<div style="color:var(--muted);padding:20px;grid-column:span 3;text-align:center;">暂无可用事件，请先在事件页面配置。</div>';
     } else {
         keys.forEach(id => {
             const info = getColor(id);
@@ -693,27 +705,6 @@ function showToast(msg) {
     }, 2000);
 }
 
-function initMouseDragScroll() {
-    const el = document.getElementById('eventScrollContainer');
-    let isDown = false;
-    let startX, scrollLeft;
-
-    el.addEventListener('mousedown', (e) => {
-        isDown = true;
-        startX = e.pageX - el.offsetLeft;
-        scrollLeft = el.scrollLeft;
-    });
-    el.addEventListener('mouseleave', () => { isDown = false; });
-    el.addEventListener('mouseup', () => { isDown = false; });
-    el.addEventListener('mousemove', (e) => {
-        if (!isDown) return;
-        e.preventDefault();
-        const x = e.pageX - el.offsetLeft;
-        const walk = (x - startX) * 1.5;
-        el.scrollLeft = scrollLeft - walk;
-    });
-}
-
 /* ========== 渲染 ========== */
 function render() {
     renderTabs();
@@ -722,7 +713,6 @@ function render() {
 }
 
 function renderTabs() {
-    // 恢复原有逻辑：仅统计在当前年份有数据记录的事件
     const bySource = {};
     allData.forEach(c => {
         bySource[c.source] = (bySource[c.source] || 0) + 1;

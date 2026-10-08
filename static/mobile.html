@@ -40,10 +40,16 @@
         }
         .grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(2, 1fr);
             gap: 12px;
             flex: 1;
             align-content: start;
+        }
+        @media (min-width: 600px) {
+            .grid { grid-template-columns: repeat(3, 1fr); }
+        }
+        @media (min-width: 900px) {
+            .grid { grid-template-columns: repeat(4, 1fr); }
         }
         .btn {
             border: none;
@@ -77,18 +83,20 @@
             z-index: 200;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: 16px;
+            backdrop-filter: blur(4px);
         }
         .modal.show { display: flex; }
         .modal-content {
             background: #161b22;
             border: 1px solid #30363d;
             border-radius: 16px;
-            padding: 24px;
+            padding: 20px;
             width: 100%;
-            max-width: 340px;
+            max-width: 360px;
             max-height: 90vh;
             overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
         }
         .modal h2 {
             font-size: 1.1rem;
@@ -103,15 +111,11 @@
             background: #0d1117;
             color: #e6edf3;
             font-size: 1rem;
-            margin-bottom: 12px;
+            margin-bottom: 14px;
         }
         .modal input[type="text"]:focus {
             outline: none;
             border-color: #238636;
-        }
-        .modal input:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
         }
         .modal label {
             display: block;
@@ -119,40 +123,22 @@
             font-size: 0.85rem;
             margin-bottom: 6px;
         }
-        .hint {
-            font-size: 0.75rem;
-            color: #6e7681;
-            margin: -8px 0 12px;
-        }
-        .emoji-picker, .color-picker {
-            display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-        .emoji-option {
-            font-size: 1.5rem;
-            padding: 8px;
-            text-align: center;
-            background: #21262d;
-            border: 2px solid transparent;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-        .emoji-option.selected {
-            border-color: #238636;
-            background: #238636;
-        }
 
         .custom-emoji-row {
-            margin-bottom: 16px;
+            margin-bottom: 14px;
         }
         .custom-emoji-row input[type="text"] {
             margin-bottom: 0;
             text-align: center;
-            font-size: 1.2rem;
+            font-size: 1.5rem;
         }
 
+        .color-picker {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 8px;
+            margin-bottom: 10px;
+        }
         .color-option {
             width: 100%;
             aspect-ratio: 1;
@@ -275,14 +261,9 @@
             <label>名称</label>
             <input type="text" id="eventName" placeholder="例如：跑步">
 
-            <label>来源 ID</label>
-            <input type="text" id="eventSource" placeholder="例如：running">
-            <p class="hint" id="sourceHint"></p>
-
-            <label>表情 (预设 / 自选 Emoji)</label>
-            <div class="emoji-picker" id="emojiPicker"></div>
+            <label>图标 (输入或粘贴 Emoji)</label>
             <div class="custom-emoji-row">
-                <input type="text" id="customEmojiInput" placeholder="输入或粘贴" oninput="onCustomEmojiInputChange(this.value)">
+                <input type="text" id="customEmojiInput" placeholder="输入 Emoji，如 ☕" oninput="onCustomEmojiInputChange(this.value)">
             </div>
 
             <label>颜色 (预设 / HEX自选)</label>
@@ -303,12 +284,11 @@
                 <button class="btn-save" id="saveBtn" onclick="saveEvent()">添加</button>
             </div>
 
-            <button class="btn-delete" id="deleteBtn" style="display:none;" onclick="confirmDelete()">删除此事件类型</button>
+            <button class="btn-delete" id="deleteBtn" style="display:none;" onclick="confirmDelete()">彻底删除此事件类型</button>
         </div>
     </div>
 
 <script>
-const emojis = ['☕','🏃','📚','🧠','💡','🧘','🎓','💪','🎯','✍️','🎵','🌱','💻','🐙','📱'];
 const colors = [
     '#8B4513','#238636','#f97316','#eab308',
     '#3b82f6','#a855f7','#ec4899','#ef4444',
@@ -317,7 +297,7 @@ const colors = [
 
 let eventsList = [];
 let isEditing = false;
-let selectedEmoji = emojis[0];
+let selectedEmoji = '📱';
 let selectedColor = colors[0];
 let editingIndex = -1;
 
@@ -336,6 +316,16 @@ async function initData() {
         if (btn) btn.style.animation = 'none';
         render();
     }
+}
+
+// 自动分配从 1 开始递增并自动填补回收空缺的数字 ID
+function getNextAvailableSourceId() {
+    const existingIds = new Set(eventsList.map(e => parseInt(e.id)).filter(n => !isNaN(n) && n > 0));
+    let id = 1;
+    while (existingIds.has(id)) {
+        id++;
+    }
+    return String(id);
 }
 
 function render() {
@@ -381,11 +371,9 @@ function openAdd() {
     document.getElementById('saveBtn').textContent = '添加';
     document.getElementById('deleteBtn').style.display = 'none';
     document.getElementById('eventName').value = '';
-    document.getElementById('eventSource').value = '';
-    document.getElementById('eventSource').disabled = false;
-    document.getElementById('sourceHint').textContent = '';
     document.getElementById('isLowFreq').checked = false;
-    updateEmojiState(emojis[0]);
+    
+    updateEmojiState('📱');
     updateColorState(colors[0]);
     document.getElementById('modal').classList.add('show');
 }
@@ -399,10 +387,8 @@ function openEdit(index) {
     document.getElementById('saveBtn').textContent = '保存';
     document.getElementById('deleteBtn').style.display = 'block';
     document.getElementById('eventName').value = e.name || '';
-    document.getElementById('eventSource').value = e.id || '';
-    document.getElementById('eventSource').disabled = true;
-    document.getElementById('sourceHint').textContent = '来源 ID 不可修改（与历史打卡数据绑定）';
     document.getElementById('isLowFreq').checked = !!e.is_low_freq;
+    
     updateEmojiState(e.emoji || '📱');
     updateColorState(e.color || colors[0]);
     document.getElementById('modal').classList.add('show');
@@ -413,26 +399,14 @@ function closeModal() {
     editingIndex = -1;
 }
 
-function renderEmojiPicker() {
-    document.getElementById('emojiPicker').innerHTML = emojis.map(e =>
-        `<div class="emoji-option ${e === selectedEmoji ? 'selected' : ''}" onclick="selectEmoji('${e}')">${e}</div>`
-    ).join('');
-}
-
 function updateEmojiState(emojiStr) {
     selectedEmoji = emojiStr || '📱';
     const input = document.getElementById('customEmojiInput');
     if (input) input.value = emojiStr;
-    renderEmojiPicker();
-}
-
-function selectEmoji(e) {
-    updateEmojiState(e);
 }
 
 function onCustomEmojiInputChange(val) {
     selectedEmoji = val.trim() || '📱';
-    renderEmojiPicker();
 }
 
 function renderColorPicker() {
@@ -475,7 +449,6 @@ function onCustomHexInputChange(val) {
 
 async function saveEvent() {
     const name = document.getElementById('eventName').value.trim();
-    let source = document.getElementById('eventSource').value.trim().toLowerCase().replace(/\s+/g, '-');
     const isLowFreq = document.getElementById('isLowFreq').checked;
 
     if (!name) {
@@ -483,23 +456,14 @@ async function saveEvent() {
         return;
     }
 
-    if (editingIndex < 0) {
-        if (!source) {
-            alert('请填写来源 ID');
-            return;
-        }
-        if (eventsList.find(e => e.id === source)) {
-            alert('该来源 ID 已存在');
-            return;
-        }
-    }
-
     if (!/^#[0-9A-Fa-f]{6}$/.test(selectedColor)) {
         alert('请输入有效的 6 位 HEX 颜色值（例如：#238636）');
         return;
     }
 
-    const targetId = editingIndex >= 0 ? eventsList[editingIndex].id : source;
+    // 新增时自动获取可用数字 ID，修改时继承原 ID
+    const targetId = editingIndex >= 0 ? eventsList[editingIndex].id : getNextAvailableSourceId();
+    
     const payload = {
         id: targetId,
         name: name,
