@@ -169,7 +169,15 @@ func corsMiddleware(next http.Handler) http.Handler {
         w.Header().Set("Access-Control-Allow-Origin", "*")
         w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-        w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+        // API 响应禁止缓存；静态资源允许缓存（manifest / sw.js 走 revalidate），否则 PWA 无法利用 HTTP 缓存
+        p := r.URL.Path
+        if strings.HasPrefix(p, "/api/") {
+            w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+        } else if p == "/" || strings.HasSuffix(p, ".html") || p == "/manifest.json" || p == "/sw.js" {
+            w.Header().Set("Cache-Control", "no-cache")
+        } else {
+            w.Header().Set("Cache-Control", "public, max-age=604800")
+        }
 
         if r.Method == http.MethodOptions {
             w.WriteHeader(http.StatusOK)
@@ -177,6 +185,22 @@ func corsMiddleware(next http.Handler) http.Handler {
         }
         next.ServeHTTP(w, r)
     })
+}
+
+// PWA 必备资源必须免登录公开，否则浏览器拿不到 manifest、
+// 注册不了 Service Worker、校验不了图标，导致无法安装为 PWA
+func isPublicPwaAsset(path string) bool {
+    switch path {
+    case "/manifest.json",
+        "/sw.js",
+        "/icon-192.png",
+        "/icon-512.png",
+        "/apple-touch-icon.png",
+        "/favicon-16x16.png",
+        "/favicon-32x32.png":
+        return true
+    }
+    return false
 }
 
 func authMiddleware(next http.Handler) http.Handler {
@@ -188,7 +212,7 @@ func authMiddleware(next http.Handler) http.Handler {
 
         path := r.URL.Path
 
-        if path == "/login.html" || path == "/api/login" || path == "/api/health" {
+        if path == "/login.html" || path == "/api/login" || path == "/api/health" || isPublicPwaAsset(path) {
             next.ServeHTTP(w, r)
             return
         }
