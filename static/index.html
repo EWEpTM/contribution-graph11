@@ -417,6 +417,24 @@
             text-align: center;
         }
         #toast.show { visibility: visible; opacity: 1; }
+        .page-dots {
+            display: none;
+            align-items: center;
+            gap: 6px;
+        }
+        .page-dots .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+        .page-dots .dot.active { background: var(--green); border-color: var(--green); }
+        @media (min-width: 1440px) {
+            .container { max-width: 1600px; }
+        }
         @media (max-width: 640px) {
             .stats { grid-template-columns: repeat(2, 1fr); }
         }
@@ -462,6 +480,10 @@
                 <button class="record-btn" id="recordBtn" onclick="handleRecordClick()">+ 记录</button>
             </div>
             <div style="display:flex;gap:0.5rem;align-items:center;">
+                <div class="page-dots" id="pageDots">
+                    <span class="dot" onclick="setNarrowPage(0)" title="上半年"></span>
+                    <span class="dot" onclick="setNarrowPage(1)" title="下半年"></span>
+                </div>
                 <select id="combineMode" style="display:none;" title="合并方式">
                     <option value="winner">热度</option>
                     <option value="blend">混合</option>
@@ -610,6 +632,7 @@ async function init() {
     yearSel.onchange = async () => {
         year = parseInt(yearSel.value);
         localStorage.setItem('dashboard_year', year);
+        narrowPage = 0;
         await loadData();
         render();
     };
@@ -629,6 +652,35 @@ async function init() {
         await loadData();
         render();
     }, 30000);
+
+    // 窄屏左右滑动切换月份分页
+    const heatWrap = document.querySelector('.heatmap-wrap');
+    if (heatWrap) {
+        let swipeX = 0, swipeY = 0, swiping = false;
+        heatWrap.addEventListener('touchstart', function (e) {
+            swipeX = e.touches[0].clientX;
+            swipeY = e.touches[0].clientY;
+            swiping = false;
+        }, { passive: true });
+        heatWrap.addEventListener('touchmove', function (e) {
+            const dx = e.touches[0].clientX - swipeX;
+            const dy = e.touches[0].clientY - swipeY;
+            if (!swiping && Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) swiping = true;
+        }, { passive: true });
+        heatWrap.addEventListener('touchend', function (e) {
+            if (!swiping) return;
+            const dx = e.changedTouches[0].clientX - swipeX;
+            if (Math.abs(dx) < 40) return;
+            if (window.innerWidth >= 640) return;
+            const dir = dx < 0 ? 1 : -1;
+            const np = Math.max(0, Math.min(1, narrowPage + dir));
+            if (np !== narrowPage) {
+                narrowPage = np;
+                suppressClickUntil = Date.now() + 500;
+                renderHeatmap();
+            }
+        }, { passive: true });
+    }
 }
 
 async function loadStats() {
@@ -739,11 +791,45 @@ function fmtTime(t) {
     return t;
 }
 
+function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+// 窄屏月份分页：每页 6 个月（1-6 月 / 7-12 月）
+function getMonthRangeForPage(p) {
+    const start = 1 + p * 6;
+    return [start, Math.min(12, start + 5)];
+}
+
+// 计算某月区间跨过的周列数（以周一为一周起点），用于窄屏格子尺寸
+function weeksBetweenMonths(y, s, e) {
+    const start = new Date(y, s - 1, 1);
+    const end = new Date(y, e, 0);
+    const msPerDay = 86400000;
+    const monday = new Date(start);
+    monday.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    const sunday = new Date(end);
+    sunday.setDate(end.getDate() + ((7 - end.getDay()) % 7));
+    return Math.round((sunday - monday) / msPerDay / 7) + 1;
+}
+
+function setNarrowPage(p) {
+    if (narrowPage === p) return;
+    narrowPage = p;
+    renderHeatmap();
+}
+
+function updatePageDots() {
+    const dots = document.querySelectorAll('#pageDots .dot');
+    dots.forEach(function (d, i) { d.classList.toggle('active', i === narrowPage); });
+}
+
 let detailDate = null;
 let detailRecords = [];
 let pendingDeleteId = null;
+let narrowPage = 0;
+let suppressClickUntil = 0;
 
 function onHeatmapClick(params) {
+    if (Date.now() < suppressClickUntil) return; // 滑动翻页后抑制误触
     // 仅在具体事件视图下生效，全部视图点击不弹窗
     if (currentSource === 'combined') return;
     if (!params || !params.data || !params.data.value) return;
@@ -950,16 +1036,23 @@ function renderHeatmap() {
     const isNarrow = vw < 640;
     const isTablet = vw >= 640 && vw < 1024;
 
+    // 窄屏按月分页：每页 6 个月，左右滑动查看全年；桌面/平板显示全年
+    const [calStartMonth, calEndMonth] = isNarrow ? getMonthRangeForPage(narrowPage) : [1, 12];
+    const calCols = isNarrow ? weeksBetweenMonths(year, calStartMonth, calEndMonth) : 53;
+    const calRange = isNarrow
+        ? [year + '-' + pad2(calStartMonth), year + '-' + pad2(calEndMonth)]
+        : year.toString();
+
     void wrap.offsetWidth;
     let avail = wrap.clientWidth || vw;
     if (avail < 80) avail = vw - 24;
 
-    const leftPad = isNarrow ? 18 : (isTablet ? 28 : 42);
-    const rightPad = isNarrow ? 4 : (isTablet ? 12 : 20);
-    let cell = Math.floor((avail - leftPad - rightPad) / 53);
-    if (isNarrow) cell = Math.max(7, Math.min(14, cell));
+    const leftPad = isNarrow ? 18 : (isTablet ? 28 : 48);
+    const rightPad = isNarrow ? 4 : (isTablet ? 12 : 24);
+    let cell = Math.floor((avail - leftPad - rightPad) / calCols);
+    if (isNarrow) cell = Math.max(8, Math.min(18, cell));
     else if (isTablet) cell = Math.max(10, Math.min(18, cell));
-    else cell = Math.max(12, Math.min(22, cell));
+    else cell = Math.max(12, Math.min(30, cell));
 
     const usedOutside =
         (document.querySelector('h1')?.offsetHeight || 40) +
@@ -969,16 +1062,21 @@ function renderHeatmap() {
         (document.getElementById('legend')?.offsetHeight || 28) +
         (document.querySelector('footer')?.offsetHeight || 28) + 80;
 
-    const maxGraphH = Math.max(110, Math.min(vh - usedOutside, isNarrow ? 160 : (isTablet ? 200 : 240)));
+    const maxGraphH = Math.max(110, Math.min(vh - usedOutside, isNarrow ? 160 : (isTablet ? 200 : 340)));
     let graphH = Math.round(cell * 7 + (isNarrow ? 36 : 48));
     if (graphH > maxGraphH) {
         graphH = maxGraphH;
         const cellByH = Math.floor((graphH - (isNarrow ? 36 : 48)) / 7);
-        if (cellByH > 0 && cellByH < cell) cell = Math.max(isNarrow ? 7 : 10, cellByH);
+        if (cellByH > 0 && cellByH < cell) cell = Math.max(isNarrow ? 8 : 10, cellByH);
     }
-    const graphW = 53 * cell + leftPad + rightPad;
+    const graphW = calCols * cell + leftPad + rightPad;
     el.style.width = graphW + 'px';
     el.style.height = graphH + 'px';
+
+    // 窄屏月份分页指示点
+    const pageDotsEl = document.getElementById('pageDots');
+    if (pageDotsEl) pageDotsEl.style.display = isNarrow ? 'flex' : 'none';
+    updatePageDots();
 
     const draw = () => {
         if (chart && isIOSDevice()) {
@@ -1024,13 +1122,14 @@ function renderHeatmap() {
                 left: leftPad,
                 right: rightPad,
                 cellSize: [cell, cell],
-                range: year.toString(),
+                range: calRange,
                 itemStyle: { color: '#161b22', borderColor: '#0d1117', borderWidth: 1 },
                 splitLine: { show: false },
                 yearLabel: { show: false },
                 dayLabel: {
                     color: '#8b949e', firstDay: 1,
-                    nameMap: ['7', '1', '2', '3', '4', '5', '6'],
+                    // nameMap 下标 = 星期几（0=周日）：周一/周三/周五显示 一/三/五，其余留空
+                    nameMap: ['', '一', '', '三', '', '五', ''],
                     fontSize: labelSize
                 },
                 monthLabel: { color: '#8b949e', fontSize: monthSize }
@@ -1089,3 +1188,4 @@ init();
 </script>
 </body>
 </html>
+<!-- （注：内容由AI生成） -->
