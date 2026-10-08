@@ -297,7 +297,7 @@
 
             <label>来源 ID</label>
             <input type="text" id="eventSource" placeholder="例如：running">
-            <p class="hint" id="sourceHint">英文小写，保存后不可修改（对应打卡数据）</p>
+            <p class="hint" id="sourceHint"></p>
 
             <label>表情 (预设 / 自选 Emoji)</label>
             <div class="emoji-picker" id="emojiPicker"></div>
@@ -404,7 +404,7 @@ function openAdd() {
     document.getElementById('eventName').value = '';
     document.getElementById('eventSource').value = '';
     document.getElementById('eventSource').disabled = false;
-    document.getElementById('sourceHint').textContent = '英文小写，保存后不可修改（对应打卡数据）';
+    document.getElementById('sourceHint').textContent = '';
     document.getElementById('isLowFreq').checked = false;
     updateEmojiState(emojis[0]);
     updateColorState(colors[0]);
