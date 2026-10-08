@@ -129,7 +129,7 @@
             display: grid;
             grid-template-columns: repeat(6, 1fr);
             gap: 8px;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
         }
         .emoji-option {
             font-size: 1.5rem;
@@ -144,6 +144,17 @@
             border-color: #238636;
             background: #238636;
         }
+
+        /* 自定义 Emoji 输入行 */
+        .custom-emoji-row {
+            margin-bottom: 16px;
+        }
+        .custom-emoji-row input[type="text"] {
+            margin-bottom: 0;
+            text-align: center;
+            font-size: 1.2rem;
+        }
+
         .color-option {
             width: 100%;
             aspect-ratio: 1;
@@ -264,13 +275,15 @@
             <input type="text" id="eventSource" placeholder="例如：running">
             <p class="hint" id="sourceHint">英文小写，保存后不可修改（对应打卡数据）</p>
 
-            <label>表情</label>
+            <label>表情 (预设 / 自选 Emoji)</label>
             <div class="emoji-picker" id="emojiPicker"></div>
+            <!-- 新增自定义 Emoji 输入框 -->
+            <div class="custom-emoji-row">
+                <input type="text" id="customEmojiInput" placeholder="直接输入或粘贴任意 Emoji (如 🚴)" oninput="onCustomEmojiInputChange(this.value)">
+            </div>
 
             <label>颜色 (预设 / HEX自选)</label>
             <div class="color-picker" id="colorPicker"></div>
-            
-            <!-- 新增自定义 HEX 颜色选择行 -->
             <div class="custom-color-row">
                 <input type="color" id="hexColorPicker" oninput="onCustomColorPickerChange(this.value)">
                 <input type="text" id="hexColorInput" placeholder="#238636" maxlength="7" oninput="onCustomHexInputChange(this.value)">
@@ -363,9 +376,8 @@ function openAdd() {
     document.getElementById('eventSource').value = '';
     document.getElementById('eventSource').disabled = false;
     document.getElementById('sourceHint').textContent = '英文小写，保存后不可修改（对应打卡数据）';
-    selectedEmoji = emojis[0];
+    updateEmojiState(emojis[0]);
     updateColorState(colors[0]);
-    renderEmojiPicker();
     document.getElementById('modal').classList.add('show');
 }
 
@@ -381,9 +393,8 @@ function openEdit(index) {
     document.getElementById('eventSource').value = e.id || '';
     document.getElementById('eventSource').disabled = true;
     document.getElementById('sourceHint').textContent = '来源 ID 不可修改（与历史打卡数据绑定）';
-    selectedEmoji = e.emoji || emojis[0];
+    updateEmojiState(e.emoji || '📱');
     updateColorState(e.color || colors[0]);
-    renderEmojiPicker();
     document.getElementById('modal').classList.add('show');
 }
 
@@ -396,6 +407,22 @@ function renderEmojiPicker() {
     document.getElementById('emojiPicker').innerHTML = emojis.map(e =>
         `<div class="emoji-option ${e === selectedEmoji ? 'selected' : ''}" onclick="selectEmoji('${e}')">${e}</div>`
     ).join('');
+}
+
+function updateEmojiState(emojiStr) {
+    selectedEmoji = emojiStr || '📱';
+    const input = document.getElementById('customEmojiInput');
+    if (input) input.value = emojiStr;
+    renderEmojiPicker();
+}
+
+function selectEmoji(e) {
+    updateEmojiState(e);
+}
+
+function onCustomEmojiInputChange(val) {
+    selectedEmoji = val.trim() || '📱';
+    renderEmojiPicker();
 }
 
 function renderColorPicker() {
@@ -417,7 +444,6 @@ function updateColorState(hex) {
     renderColorPicker();
 }
 
-function selectEmoji(e) { selectedEmoji = e; renderEmojiPicker(); }
 function selectColor(c) { updateColorState(c); }
 
 function onCustomColorPickerChange(val) {
@@ -457,7 +483,6 @@ async function saveEvent() {
         }
     }
 
-    // 验证颜色 HEX 格式
     if (!/^#[0-9A-Fa-f]{6}$/.test(selectedColor)) {
         alert('请输入有效的 6 位 HEX 颜色值（例如：#238636）');
         return;
