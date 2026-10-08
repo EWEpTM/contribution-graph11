@@ -29,7 +29,6 @@
             padding: 1.5rem 1rem 2rem;
         }
 
-        /* 提升最大宽度，适应电脑大屏 */
         .container {
             max-width: 1320px;
             margin: 0 auto;
@@ -243,7 +242,7 @@
         }
         footer a:hover { color: var(--text); }
 
-        /* ========== 弹窗样式 ========== */
+        /* 弹窗样式 */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -427,7 +426,7 @@
 </head>
 <body>
 <div class="container">
-    <h1>热力图</h1>
+    <h1>Keep 热力图</h1>
 
     <div class="source-tabs" id="sourceTabs"></div>
 
@@ -446,7 +445,7 @@
         </div>
         <div class="stat">
             <div class="stat-val" id="statSources">0</div>
-            <div class="stat-lbl">事件</div>
+            <div class="stat-lbl">事件类</div>
         </div>
     </div>
 
@@ -476,7 +475,7 @@
     </div>
 
     <footer>
-        <a href="/mobile.html">事件</a>
+        <a href="/mobile.html">⚙️ 事件类型配置</a>
     </footer>
 </div>
 
@@ -577,6 +576,7 @@ async function init() {
 
     const yearSel = document.getElementById('year');
     const cy = new Date().getFullYear();
+    yearSel.innerHTML = '';
     for (let y = cy; y >= cy - 5; y--) {
         yearSel.innerHTML += `<option value="${y}" ${y===year?'selected':''}>${y}</option>`;
     }
@@ -642,7 +642,7 @@ function openSelectEventModal() {
     const keys = Object.keys(sourceColors).filter(k => k !== 'default');
     
     if (keys.length === 0) {
-        container.innerHTML = '<div style="color:var(--muted);padding:20px;grid-column:span 3;text-align:center;">暂无可用事件，请先在事件页面配置。</div>';
+        container.innerHTML = '<div style="color:var(--muted);padding:20px;grid-column:span 3;text-align:center;">暂无可用事件，请先在事件配置页面添加。</div>';
     } else {
         keys.forEach(id => {
             const info = getColor(id);
@@ -698,6 +698,7 @@ async function submitLog() {
 
         if (res.ok) {
             showToast('✅ 记录成功！');
+            // 立即加载并渲染，告别延迟
             await loadStats();
             await loadData();
             render();
@@ -772,7 +773,7 @@ function renderStats() {
     const bySource = statsData.by_source || {};
 
     const now = new Date();
-    const todayStr = [
+    const todayStr = statsData.today_date || [
         now.getFullYear(),
         String(now.getMonth() + 1).padStart(2, '0'),
         String(now.getDate()).padStart(2, '0')
@@ -782,14 +783,16 @@ function renderStats() {
     if (currentSource === 'combined') {
         total = allData.length;
         today = allData.filter(c => {
-            const t = c.timestamp || '';
-            const d = t.slice(0, 10);
-            return d === todayStr;
+            const dt = c.local_date || (c.timestamp || '').slice(0, 10);
+            return dt === todayStr;
         }).length;
     } else {
         const filtered = allData.filter(c => c.source === currentSource);
         total = filtered.length;
-        today = filtered.filter(c => (c.timestamp || '').slice(0, 10) === todayStr).length;
+        today = filtered.filter(c => {
+            const dt = c.local_date || (c.timestamp || '').slice(0, 10);
+            return dt === todayStr;
+        }).length;
     }
 
     document.getElementById('statTotal').textContent = total;
@@ -814,7 +817,8 @@ function renderHeatmap() {
 
     const days = {};
     data.forEach(item => {
-        const dt = (item.timestamp || '').split('T')[0];
+        // 优先利用后端返回的 local_date 字段，提高稳健性
+        const dt = item.local_date || (item.timestamp || '').split('T')[0];
         if (!dt) return;
         if (!days[dt]) days[dt] = { total: 0, src: {} };
         days[dt].total++;
@@ -860,7 +864,6 @@ function renderHeatmap() {
     const avail = wrap.clientWidth || 800;
     const isMobile = window.innerWidth < 640;
 
-    // 根据页面可用宽度动态计算格子大小（取消原先电脑端 14px 限制，最高可扩展至 24px）
     const leftPad = isMobile ? 22 : 42;
     const rightPad = isMobile ? 4 : 20;
 
@@ -868,18 +871,21 @@ function renderHeatmap() {
     if (isMobile) {
         cell = Math.max(9, cell);
     } else {
-        cell = Math.max(12, Math.min(24, cell)); // 电脑端最小 12px，最大 24px
+        cell = Math.max(12, Math.min(24, cell));
     }
 
     const graphW = 53 * cell + leftPad + rightPad;
-    // 热力图高度随格子大小等比例放大
     const graphH = Math.max(isMobile ? 130 : 170, cell * 8.5 + (isMobile ? 30 : 45));
 
     el.style.width = graphW + 'px';
     el.style.height = graphH + 'px';
 
-    if (chart) chart.dispose();
-    chart = echarts.init(el, 'dark');
+    // 优化：重用 Chart 实例，避免闪烁和性能浪费
+    if (!chart) {
+        chart = echarts.init(el, 'dark');
+    } else {
+        chart.resize({ width: graphW, height: graphH });
+    }
 
     chart.setOption({
         backgroundColor: 'transparent',
@@ -923,7 +929,7 @@ function renderHeatmap() {
                 color: '#8b949e',
                 firstDay: 1,
                 nameMap: ['7', '1', '2', '3', '4', '5', '6'],
-                fontSize: Math.max(10, Math.floor(cell * 0.7)) // 文字随格子大小动态调整
+                fontSize: Math.max(10, Math.floor(cell * 0.7))
             },
             monthLabel: { 
                 color: '#8b949e', 
@@ -935,7 +941,7 @@ function renderHeatmap() {
             coordinateSystem: 'calendar',
             data: chartData
         }
-    });
+    }, true);
 }
 
 function getCombinedColor(stats) {

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#0d1117">
-    <title>事件列表</title>
+    <title>事件配置</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -248,7 +248,7 @@
 </head>
 <body>
     <div class="header">
-        <h1>事件列表</h1>
+        <h1>事件配置</h1>
         <div style="display:flex;gap:8px;">
             <button class="edit-btn" id="syncBtn" onclick="initData()" title="刷新">↻</button>
             <button class="edit-btn" id="editBtn" onclick="toggleEdit()">编辑</button>
@@ -279,7 +279,7 @@
 
             <div class="checkbox-row" onclick="document.getElementById('isLowFreq').click()">
                 <input type="checkbox" id="isLowFreq" onclick="event.stopPropagation()">
-                <label for="isLowFreq">少量事件（1次打卡即正常亮度）</label>
+                <label for="isLowFreq">低频事件（1次打卡即达到高亮）</label>
             </div>
 
             <div class="modal-buttons">
@@ -291,7 +291,7 @@
         </div>
     </div>
 
-    <!-- 内置彻底删除二次确认弹窗 -->
+    <!-- 彻底删除确认弹窗 -->
     <div class="modal" id="deleteModal">
         <div class="modal-content" style="max-width:320px;">
             <h2 style="color:#f85149;">确认彻底删除</h2>
@@ -510,7 +510,6 @@ async function saveEvent() {
     }
 }
 
-/* ========== 内置彻底删除弹窗逻辑 ========== */
 function openDeleteConfirmModal() {
     if (editingIndex < 0) return;
     const target = eventsList[editingIndex];

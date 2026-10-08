@@ -93,6 +93,14 @@ func main() {
 	}
 	defer db.Close()
 
+	// 开启 WAL 模式与忙等待超时，解决 SQLite 并发锁库问题
+	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+		log.Printf("⚠️  Failed to set WAL mode: %v", err)
+	}
+	if _, err := db.Exec("PRAGMA busy_timeout=5000;"); err != nil {
+		log.Printf("⚠️  Failed to set busy_timeout: %v", err)
+	}
+
 	createTableSQL := `
     CREATE TABLE IF NOT EXISTS events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -168,7 +176,6 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 func authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 若未设置 AUTH_PASSWORD 环境变量，直接放行
 		if authPassword == "" {
 			next.ServeHTTP(w, r)
 			return
@@ -176,13 +183,11 @@ func authMiddleware(next http.Handler) http.Handler {
 
 		path := r.URL.Path
 
-		// 豁免登录页面、登录接口和健康检查接口
 		if path == "/login.html" || path == "/api/login" || path == "/api/health" {
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// 校验 Cookie
 		cookie, err := r.Cookie("auth_session")
 		isValid := (err == nil && cookie.Value == expectedToken)
 
@@ -226,7 +231,6 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 写入长效 Cookie（10年，除非清理浏览器 Cookie）
 	http.SetCookie(w, &http.Cookie{
 		Name:     "auth_session",
 		Value:    expectedToken,
