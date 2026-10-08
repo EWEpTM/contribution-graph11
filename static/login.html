@@ -116,6 +116,17 @@
             text-align: center;
             display: none;
         }
+        .reg-closed {
+            background: var(--bg);
+            border: 1px dashed var(--border);
+            border-radius: 10px;
+            padding: 1rem;
+            text-align: center;
+            font-size: 0.88rem;
+            color: var(--muted);
+            display: none;
+            margin-top: 0.25rem;
+        }
         .tip {
             text-align: center;
             font-size: 0.78rem;
@@ -161,17 +172,42 @@
             <button type="submit" class="btn-login" id="regBtn">注册</button>
             <div class="error-msg" id="regErr"></div>
         </form>
+        <div class="reg-closed" id="regClosed">注册未开放，请联系管理员开启</div>
 
         <div class="tip" id="modeTip">注册后为普通用户账号，仅可查看和记录自己的打卡</div>
     </div>
 
     <script>
+        let allowRegister = false;
+
         function switchTab(mode) {
             document.getElementById('tabLogin').classList.toggle('active', mode === 'login');
             document.getElementById('tabRegister').classList.toggle('active', mode === 'register');
             document.getElementById('loginForm').style.display = mode === 'login' ? 'block' : 'none';
             document.getElementById('registerForm').style.display = mode === 'register' ? 'block' : 'none';
+            const closed = document.getElementById('regClosed');
+            const btn = document.getElementById('regBtn');
+            if (mode === 'register') {
+                closed.style.display = allowRegister ? 'none' : 'block';
+                btn.disabled = !allowRegister;
+            }
         }
+
+        // 读取注册开关（管理员在用户管理页开启后才允许注册）
+        async function loadRegStatus() {
+            try {
+                const res = await fetch('/api/config');
+                if (res.ok) {
+                    const d = await res.json();
+                    allowRegister = !!d.allow_register;
+                }
+            } catch (e) { /* 离线或请求失败时保持未开放 */ }
+            if (document.getElementById('registerForm').style.display === 'block') {
+                document.getElementById('regClosed').style.display = allowRegister ? 'none' : 'block';
+                document.getElementById('regBtn').disabled = !allowRegister;
+            }
+        }
+        loadRegStatus();
 
         async function handleLogin(e) {
             e.preventDefault();

@@ -246,6 +246,7 @@
             -webkit-overflow-scrolling: touch;
             display: flex;
             align-items: center;
+            justify-content: flex-start;
             flex: 1 1 auto;
             min-height: 0;
             padding-bottom: 2px;
@@ -501,6 +502,24 @@
             text-align: center;
         }
         #toast.show { visibility: visible; opacity: 1; }
+        #tipPopup {
+            display: none;
+            position: fixed;
+            z-index: 1990;
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            box-shadow: var(--modal-shadow);
+            padding: 7px 12px;
+            font-size: 0.85rem;
+            line-height: 1.35;
+            text-align: center;
+            color: var(--text);
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        #tipPopup .tip-date { font-weight: 600; }
+        #tipPopup .tip-count { color: var(--muted); font-size: 0.8rem; }
         .theme-fab {
             position: fixed;
             right: 20px;
@@ -671,6 +690,9 @@
 
 <div id="toast">✅ 记录成功！</div>
 
+<!-- 点击格子后的小提示框（日期+次数）：点击其他地方/滑动屏幕即消失，详情大页仅 × 关闭 -->
+<div id="tipPopup"></div>
+
 <script>
 const DEFAULT_PRESETS = {
     'default': { rgb: '139,148,158', hex: '#8b949e', name: '其他', is_low_freq: false }
@@ -794,10 +816,14 @@ function syncScrollbar() {
     thumb.style.left = Math.round(p * (tw - thw)) + 'px';
 }
 
-// 需要滚动时，页面打开后的首次渲染把当前月份放到可视区中间，不用手动滑动找
-// 返回 true 表示已成功居中（调用方据此决定不再重试）
+// 需要滚动时，页面打开后的首次渲染把当前月份放到合适位置，不用手动滑动找：
+// 前后内容都充足 → 当前月居中；当前月靠后（如 12 月，右侧内容不足半屏）→ 贴右缘，
+// 左侧完整显示之前的月份，避免"当前月居中、右侧一大片空白"；靠前（如 1 月）→ 贴左。
+// 返回 true 表示已成功定位（调用方据此决定不再重试）
 function centerOnCurrentMonth(wrap, cell) {
-    const maxScroll = wrap.scrollWidth - wrap.clientWidth;
+    const scrollW = wrap.scrollWidth;
+    const cw = wrap.clientWidth;
+    const maxScroll = scrollW - cw;
     if (maxScroll <= 0) return false;
     const m = new Date().getMonth() + 1;
     const dateStr = year + '-' + String(m).padStart(2, '0') + '-01';
@@ -805,7 +831,14 @@ function centerOnCurrentMonth(wrap, cell) {
     if (!px || typeof px[0] !== 'number') return false;
     const monthCols = weeksBetweenMonths(year, m, m);
     const midX = px[0] + (monthCols - 1) * cell / 2;
-    let target = midX - wrap.clientWidth / 2;
+    let target;
+    if (midX + cw / 2 > scrollW) {
+        target = maxScroll; // 右侧内容不足半屏 → 当前月贴右缘
+    } else if (midX < cw / 2) {
+        target = 0; // 当前月太靠前 → 贴左
+    } else {
+        target = midX - cw / 2; // 前后都充足 → 居中
+    }
     target = Math.max(0, Math.min(maxScroll, target));
     wrap.scrollLeft = target;
     syncScrollbar();
@@ -813,8 +846,10 @@ function centerOnCurrentMonth(wrap, cell) {
     return true;
 }
 
-// 月份标签覆盖层：标签贴在各自月份首日所在列的中心；
-// 当该列被可视区右缘切掉（或完全滚出可视区）时隐藏标签，避免"4月露头"
+// 月份标签覆盖层：标签贴在各自月份首日所在列的中心。
+// 标签层绝对定位在滚动容器(.heatmap-wrap)内部，会随内容一起滚动，
+// 因此 left 用内容坐标(px[0])即可与格子列天然对齐（不能再减 scrollLeft，否则双重偏移）；
+// 隐藏判断用屏幕坐标（内容坐标 - scrollLeft），右缘被切掉或滚出可视区时隐藏，避免"4月露头"
 function layoutMonthLabels() {
     const el = document.getElementById('hmMonthLabels');
     const wrap = document.querySelector('.heatmap-wrap');
@@ -829,15 +864,21 @@ function layoutMonthLabels() {
         }
     }
     const cw = wrap.clientWidth;
+    const sl = wrap.scrollLeft;
+    // heatmap 在 wrap 内的布局偏移（内容不满时会被 justify-content 居中偏移）：
+    // 标签层 absolute 钉在 wrap 左缘，必须加上该偏移才能与格子列同参考系
+    const hmEl = document.getElementById('heatmap');
+    const off = hmEl ? hmEl.offsetLeft : 0;
     for (let m = 1; m <= 12; m++) {
         const span = el.__spans[m - 1];
         const dateStr = year + '-' + String(m).padStart(2, '0') + '-01';
         const px = chart.convertToPixel({ coordSysName: 'calendar', calendarIndex: 0 }, dateStr);
         if (!px || typeof px[0] !== 'number') { span.style.visibility = 'hidden'; continue; }
-        const x = px[0] - wrap.scrollLeft;
-        span.style.left = x + 'px';
-        // 整列超出可视区，或右缘被切掉 → 隐藏标签
-        span.style.visibility = (x < -40 || x > cw - 8) ? 'hidden' : 'visible';
+        span.style.left = (px[0] + off) + 'px';
+        // 标签需整体在可视区内才显示：中心离左缘不足半宽（或超出右缘）→ 隐藏，避免半截"月"字
+        const hw = span.offsetWidth / 2;
+        const sx = px[0] + off - sl;
+        span.style.visibility = (sx < hw + 4 || sx > cw - hw - 4) ? 'hidden' : 'visible';
     }
 }
 
@@ -858,8 +899,9 @@ function renderFooterLinks() {
     const me = window.__me;
     if (!el || !me) return;
     let html = '';
+    // 所有登录用户均可管理自己的事件类型；管理员额外显示用户管理
+    html += '<a href="/manage.html">⚙️ 事件类型配置</a>';
     if (me.role === 'admin') {
-        html += '<a href="/manage.html">⚙️ 事件类型配置</a>';
         html += ' &nbsp;<a href="/users.html">👥 用户管理</a>';
     }
     if (me.username) {
@@ -970,24 +1012,28 @@ async function init() {
         });
     }
 
-    // 详情弹窗：点击遮罩关闭；触摸滑动关闭（在记录列表内滑动不触发，可正常滚动列表）
+    // 详情弹窗只能点右上角 × 关闭（点击遮罩/滑动屏幕不会关闭它）；
+    // 点击遮罩仅隐藏小提示框（日期+次数），详情大页保持打开
     const detailOv = document.getElementById('detailModal');
-    detailOv.addEventListener('click', function (e) { if (e.target === detailOv) closeDetailModal(); });
-    let dt = null;
-    detailOv.addEventListener('touchstart', function (e) {
-        dt = {
-            x: e.touches[0].clientX,
-            y: e.touches[0].clientY,
-            inList: !!(e.target && e.target.closest && e.target.closest('#detailList'))
-        };
-    }, { passive: true });
-    detailOv.addEventListener('touchend', function (e) {
-        if (!dt) return;
-        const dx = e.changedTouches[0].clientX - dt.x;
-        const dy = e.changedTouches[0].clientY - dt.y;
-        if ((Math.abs(dx) > 40 || Math.abs(dy) > 40) && !dt.inList) closeDetailModal();
-        dt = null;
-    }, { passive: true });
+    detailOv.addEventListener('click', function (e) {
+        if (e.target === detailOv) {
+            hideTipPopup();
+            if (chart && !chart.isDisposed()) chart.dispatchAction({ type: 'hideTip' });
+        }
+        e.stopPropagation();
+    });
+
+    // 小提示框：触摸屏幕任意处即隐藏（含滑动）；点击热力图之外的位置也隐藏
+    document.addEventListener('touchstart', function (e) {
+        hideTipPopup();
+        if (chart && !chart.isDisposed()) chart.dispatchAction({ type: 'hideTip' });
+    }, { capture: true });
+    document.addEventListener('click', function (e) {
+        if (!(e.target && e.target.closest && e.target.closest('#heatmap'))) {
+            hideTipPopup();
+            if (chart && !chart.isDisposed()) chart.dispatchAction({ type: 'hideTip' });
+        }
+    });
 
     setInterval(async () => {
         await loadSourceColorsFromDB();
@@ -1136,6 +1182,9 @@ function onHeatmapClick(params) {
     detailRecords = recs.slice().sort(function (a, b) {
         return (a.timestamp || '').localeCompare(b.timestamp || '');
     });
+    // 显示小提示框（日期+次数）：移动端点击格子必须能看到；点其他地方/滑动屏幕即消失，
+    // 详情大页不受影响（仅 × 关闭）
+    showTipPopup(date, recs.length, params);
     openDetailModal();
 }
 
@@ -1167,9 +1216,49 @@ function renderDetailList() {
 function closeDetailModal() {
     document.getElementById('detailModal').classList.remove('show');
     document.getElementById('detailList').innerHTML = '';
+    hideTipPopup();
+    if (chart && !chart.isDisposed()) chart.dispatchAction({ type: 'hideTip' });
     detailDate = null;
     detailRecords = [];
     pendingDeleteId = null;
+}
+
+// 小提示框（日期+次数）：点击格子时显示在格子附近，点击其他地方/滑动屏幕/关闭详情时消失
+function showTipPopup(date, count, params) {
+    const el = document.getElementById('tipPopup');
+    el.innerHTML = '<div class="tip-date">' + date + '</div><div class="tip-count">' + count + ' 次</div>';
+    let x = 0, y = 0;
+    const hmEl = document.getElementById('heatmap');
+    if (hmEl && chart && !chart.isDisposed()) {
+        const rect = hmEl.getBoundingClientRect();
+        const px = chart.convertToPixel({ coordSysName: 'calendar', calendarIndex: 0 }, date);
+        const cs = chart.getOption().calendar[0].cellSize;
+        const cellH = (Array.isArray(cs) ? cs[1] : cs) || 20;
+        if (px && typeof px[0] === 'number') {
+            x = rect.left + px[0];
+            y = rect.top + px[1] + cellH / 2;
+        }
+    }
+    if (!x) {
+        // 兜底：用点击事件的屏幕坐标
+        const ev = params && params.event;
+        if (ev && typeof ev.offsetX === 'number') {
+            x = ev.offsetX + (hmEl ? hmEl.getBoundingClientRect().left : 0);
+            y = ev.offsetY + (hmEl ? hmEl.getBoundingClientRect().top : 0);
+        }
+    }
+    el.style.display = 'block';
+    const w = el.offsetWidth, h = el.offsetHeight;
+    let l = x - w / 2;
+    let t = y - h - 12;
+    l = Math.max(8, Math.min(window.innerWidth - w - 8, l));
+    t = Math.max(8, Math.min(window.innerHeight - h - 8, t));
+    el.style.left = l + 'px';
+    el.style.top = t + 'px';
+}
+
+function hideTipPopup() {
+    document.getElementById('tipPopup').style.display = 'none';
 }
 
 function requestDelete(id) {
@@ -1208,6 +1297,8 @@ async function confirmDelete() {
             });
             if (detailRecords.length === 0) { closeDetailModal(); return; }
             renderDetailList();
+            // 记录已变化，隐藏小提示框避免显示过期的次数
+            hideTipPopup();
         } else {
             showToast('❌ 删除失败，请重试');
         }
@@ -1310,7 +1401,8 @@ function renderHeatmap() {
             const sc = getColor(currentSource);
             let opacity;
             if (sc.is_low_freq) {
-                opacity = Math.min(1, 0.65 + (stats.total - 1) * 0.12);
+                // 低频事件：1次=较多档(0.85)，2次及以上=最高档(1.0)
+                opacity = stats.total >= 2 ? 1.0 : 0.85;
             } else {
                 // 贴合图例四档亮度：1次=少、2次=中、3次=较多、4次及以上=多（最高亮度）
                 const step = [0.35, 0.65, 0.85, 1.0];
@@ -1410,6 +1502,7 @@ function renderHeatmap() {
             tooltip: {
                 appendToBody: true,
                 confine: false,
+                triggerOn: 'mousemove',
                 extraCssText: 'z-index: 9999; pointer-events: none;',
                 position: function (point, params, dom, rect, size) {
                     return [point[0], Math.max(8, point[1] - size.contentSize[1] - 12)];
@@ -1471,7 +1564,7 @@ function getCombinedColor(stats) {
         sources.forEach(([src, cnt]) => { if (cnt > max) { max = cnt; winner = src; } });
         const sc = getColor(winner);
         const opacity = sc.is_low_freq
-            ? Math.min(1, 0.65 + (stats.total - 1) * 0.12)
+            ? (stats.total >= 2 ? 1.0 : 0.85)
             : op(stats.total);
         return `rgba(${sc.rgb},${opacity})`;
     }

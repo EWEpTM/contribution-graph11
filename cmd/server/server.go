@@ -154,6 +154,7 @@ func main() {
     mux.HandleFunc("/api/contributions", handleContributions)
     mux.HandleFunc("/api/stats", handleGetStats)
     mux.HandleFunc("/api/users", handleUsers)
+    mux.HandleFunc("/api/config", handleConfig)
     mux.HandleFunc("/api/health", handleHealth)
     mux.HandleFunc("/api/sources", handleSources)
     mux.HandleFunc("/api/sources/reorder", handleSourcesReorder)
@@ -176,7 +177,13 @@ func main() {
     fmt.Println("   Manage:    /manage.html (admin only)")
     fmt.Println("   Users:     /users.html (admin only)")
     fmt.Println("   Login:     /login.html")
-    fmt.Println("   Register:  POST /api/register")
+    if authPassword != "" {
+        if isAllowRegister() {
+            fmt.Println("   Register:  POST /api/register (open)")
+        } else {
+            fmt.Println("   Register:  POST /api/register (CLOSED, enable in /users.html)")
+        }
+    }
     fmt.Println("   API:       POST /api/contributions")
     fmt.Println("   Sources:   GET/POST/DELETE /api/sources")
     fmt.Println("   Reorder:   PUT /api/sources/reorder")
@@ -214,6 +221,11 @@ func ensureSchema() {
         color TEXT NOT NULL,
         is_low_freq INTEGER DEFAULT 0,
         sort_order INTEGER DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS app_config (
+        key TEXT PRIMARY KEY,
+        value TEXT
     );
     `
 
@@ -258,6 +270,7 @@ func ensureSchema() {
     // 旧库自动补字段
     db.Exec("ALTER TABLE sources_config ADD COLUMN is_low_freq INTEGER DEFAULT 0")
     db.Exec("ALTER TABLE sources_config ADD COLUMN sort_order INTEGER DEFAULT 0")
+    db.Exec("ALTER TABLE sources_config ADD COLUMN user_id INTEGER")
 
     // 确保管理员账号存在（docker 环境变量创建的用户默认为管理员）
     var uid int64
@@ -282,6 +295,10 @@ func ensureSchema() {
     // 迁移：历史打卡数据归属管理员
     if _, err := db.Exec("UPDATE events SET user_id = ? WHERE user_id IS NULL", uid); err != nil {
         log.Printf("⚠️  Failed to backfill user_id: %v", err)
+    }
+    // 迁移：历史事件类型归属管理员（事件类型按用户隔离，普通用户可自建自己的事件）
+    if _, err := db.Exec("UPDATE sources_config SET user_id = ? WHERE user_id IS NULL", uid); err != nil {
+        log.Printf("⚠️  Failed to backfill sources_config.user_id: %v", err)
     }
 }
 
@@ -383,6 +400,12 @@ func authMiddleware(next http.Handler) http.Handler {
 
         path := r.URL.Path
 
+        // GET /api/config 公开（登录页需要提前知道注册是否开放）；PUT 需登录，由 handler 校验管理员
+        if path == "/api/config" && r.Method == http.MethodGet {
+            next.ServeHTTP(w, r)
+            return
+        }
+
         if path == "/login.html" || path == "/api/login" || path == "/api/register" || path == "/api/health" || isPublicPwaAsset(path) {
             next.ServeHTTP(w, r)
             return
@@ -398,8 +421,8 @@ func authMiddleware(next http.Handler) http.Handler {
             return
         }
 
-        // 管理页面仅管理员可见
-        if (path == "/manage.html" || path == "/users.html") && su.Role != "admin" {
+        // 用户管理页仅管理员可见；事件类型配置页所有登录用户可用（各自管理自己的事件）
+        if path == "/users.html" && su.Role != "admin" {
             writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
             return
         }
@@ -465,6 +488,10 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
     }
     if authPassword == "" {
         writeJSON(w, http.StatusBadRequest, map[string]string{"error": "未启用账号注册"})
+        return
+    }
+    if !isAllowRegister() {
+        writeJSON(w, http.StatusBadRequest, map[string]string{"error": "注册未开放"})
         return
     }
 
@@ -829,22 +856,17 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // 事件类型是全局配置：仅管理员可增删改，普通用户只读
-    if r.Method != http.MethodGet {
-        su, ok := currentUser(r)
-        if !ok || su.Role != "admin" {
-            writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
-            return
-        }
-    }
+    // 事件类型按用户隔离：每个登录用户管理自己的事件（管理员与普通用户平等）
+    su, _ := currentUser(r)
 
     switch r.Method {
     case http.MethodGet:
         rows, err := db.Query(`
             SELECT id, name, emoji, color, is_low_freq, COALESCE(sort_order, 0)
             FROM sources_config
+            WHERE user_id = ?
             ORDER BY sort_order ASC, name ASC
-        `)
+        `, su.ID)
         if err != nil {
             http.Error(w, err.Error(), http.StatusInternalServerError)
             return
@@ -898,40 +920,38 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
             isLowFreqInt = 1
         }
 
-        // 新建时若未指定 sort_order，排到末尾
+        // 新建时若未指定 sort_order，在本用户内排到末尾
         if c.SortOrder == 0 {
             var maxOrder sql.NullInt64
-            _ = db.QueryRow("SELECT MAX(sort_order) FROM sources_config").Scan(&maxOrder)
+            _ = db.QueryRow("SELECT MAX(sort_order) FROM sources_config WHERE user_id = ?", su.ID).Scan(&maxOrder)
             if maxOrder.Valid {
                 c.SortOrder = int(maxOrder.Int64) + 1
             }
-            // 若是更新已有记录，保留原 sort_order（除非客户端显式传了）
             var existingOrder sql.NullInt64
-            errExist := db.QueryRow("SELECT sort_order FROM sources_config WHERE id = ?", c.ID).Scan(&existingOrder)
+            errExist := db.QueryRow("SELECT sort_order FROM sources_config WHERE id = ? AND user_id = ?", c.ID, su.ID).Scan(&existingOrder)
             if errExist == nil && existingOrder.Valid {
                 // 更新时不因默认 0 覆盖；仅当客户端传来非 0 才用新值
-                // 这里用：POST body 若 sort_order 为 0 且记录已存在，则不改 sort_order
             }
         }
 
         var existingID string
-        errExist := db.QueryRow("SELECT id FROM sources_config WHERE id = ?", c.ID).Scan(&existingID)
+        errExist := db.QueryRow("SELECT id FROM sources_config WHERE id = ? AND user_id = ?", c.ID, su.ID).Scan(&existingID)
         if errExist == nil {
-            // 更新：不强制改 sort_order（除非 body 里 sort_order > 0 或显式需要）
+            // 更新（仅限本人）
             _, err := db.Exec(`
                 UPDATE sources_config
                 SET name = ?, emoji = ?, color = ?, is_low_freq = ?
-                WHERE id = ?
-            `, c.Name, c.Emoji, c.Color, isLowFreqInt, c.ID)
+                WHERE id = ? AND user_id = ?
+            `, c.Name, c.Emoji, c.Color, isLowFreqInt, c.ID, su.ID)
             if err != nil {
                 http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
                 return
             }
         } else {
             _, err := db.Exec(`
-                INSERT INTO sources_config (id, name, emoji, color, is_low_freq, sort_order)
-                VALUES (?, ?, ?, ?, ?, ?)
-            `, c.ID, c.Name, c.Emoji, c.Color, isLowFreqInt, c.SortOrder)
+                INSERT INTO sources_config (id, name, emoji, color, is_low_freq, sort_order, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `, c.ID, c.Name, c.Emoji, c.Color, isLowFreqInt, c.SortOrder, su.ID)
             if err != nil {
                 http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
                 return
@@ -953,8 +973,8 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
             return
         }
 
-        resEvents, _ := tx.Exec(`DELETE FROM events WHERE source = ?`, source)
-        resConfig, _ := tx.Exec(`DELETE FROM sources_config WHERE id = ?`, source)
+        resEvents, _ := tx.Exec(`DELETE FROM events WHERE source = ? AND user_id = ?`, source, su.ID)
+        resConfig, _ := tx.Exec(`DELETE FROM sources_config WHERE id = ? AND user_id = ?`, source, su.ID)
 
         if err := tx.Commit(); err != nil {
             http.Error(w, "Database error", http.StatusInternalServerError)
@@ -1008,7 +1028,7 @@ func handleSourcesReorder(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    stmt, err := tx.Prepare(`UPDATE sources_config SET sort_order = ? WHERE id = ?`)
+    stmt, err := tx.Prepare(`UPDATE sources_config SET sort_order = ? WHERE id = ? AND user_id = ?`)
     if err != nil {
         tx.Rollback()
         http.Error(w, "Database error", http.StatusInternalServerError)
@@ -1020,7 +1040,7 @@ func handleSourcesReorder(w http.ResponseWriter, r *http.Request) {
         if it.ID == "" {
             continue
         }
-        if _, err := stmt.Exec(it.SortOrder, it.ID); err != nil {
+        if _, err := stmt.Exec(it.SortOrder, it.ID, su.ID); err != nil {
             tx.Rollback()
             http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
             return
@@ -1075,6 +1095,65 @@ func calculateStreak(userID int64) int {
         }
     }
     return streak
+}
+
+// 站点配置：GET 公开读取（登录页需要提前知道注册是否开放）；PUT 仅管理员修改
+func handleConfig(w http.ResponseWriter, r *http.Request) {
+    switch r.Method {
+    case http.MethodGet:
+        writeJSON(w, http.StatusOK, map[string]interface{}{
+            "allow_register": isAllowRegister(),
+        })
+
+    case http.MethodPut:
+        su, ok := currentUser(r)
+        if !ok || su.Role != "admin" {
+            writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+            return
+        }
+        var req struct {
+            AllowRegister *bool `json:"allow_register"`
+        }
+        if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+            http.Error(w, "Invalid JSON", http.StatusBadRequest)
+            return
+        }
+        if req.AllowRegister != nil {
+            if err := setAllowRegister(*req.AllowRegister); err != nil {
+                http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+                return
+            }
+        }
+        writeJSON(w, http.StatusOK, map[string]interface{}{
+            "status":         "success",
+            "allow_register": isAllowRegister(),
+        })
+
+    default:
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+    }
+}
+
+// 注册开关：默认关闭（未设置记录 = 未开放），管理员在用户管理页开启后用户才能注册
+func isAllowRegister() bool {
+    var v string
+    err := db.QueryRow(`SELECT value FROM app_config WHERE key = 'allow_register'`).Scan(&v)
+    if err != nil {
+        return false
+    }
+    return v == "1"
+}
+
+func setAllowRegister(v bool) error {
+    val := "0"
+    if v {
+        val = "1"
+    }
+    _, err := db.Exec(`
+        INSERT INTO app_config (key, value) VALUES ('allow_register', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `, val)
+    return err
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {

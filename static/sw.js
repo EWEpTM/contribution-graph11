@@ -1,6 +1,6 @@
 /* Keep PWA Service Worker */
-const CACHE_STATIC = 'keep-static-v12';
-const CACHE_RUNTIME = 'keep-runtime-v12';
+const CACHE_STATIC = 'keep-static-v20';
+const CACHE_RUNTIME = 'keep-runtime-v20';
 
 const PRECACHE_URLS = [
   '/',
