@@ -1,12 +1,13 @@
 /* Keep PWA Service Worker */
-const CACHE_STATIC = 'keep-static-v9';
-const CACHE_RUNTIME = 'keep-runtime-v9';
+const CACHE_STATIC = 'keep-static-v12';
+const CACHE_RUNTIME = 'keep-runtime-v12';
 
 const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/manage.html',
   '/login.html',
+  '/users.html',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',

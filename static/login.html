@@ -32,7 +32,7 @@
             background: var(--bg2);
             border: 1px solid var(--border);
             border-radius: 16px;
-            padding: 2.2rem 2rem;
+            padding: 2.2rem 2rem 1.8rem;
             width: 100%;
             max-width: 380px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
@@ -41,11 +41,36 @@
             text-align: center;
             font-size: 1.75rem;
             font-weight: 700;
-            margin-bottom: 1.8rem;
+            margin-bottom: 1.5rem;
             background: linear-gradient(135deg, #238636, #58a6ff);
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
+        }
+        .tabs {
+            display: flex;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 3px;
+            margin-bottom: 1.4rem;
+        }
+        .tab {
+            flex: 1;
+            text-align: center;
+            padding: 0.5rem 0;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--muted);
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            background: transparent;
+        }
+        .tab.active {
+            background: var(--bg3);
+            color: var(--text);
         }
         .form-group {
             margin-bottom: 1.25rem;
@@ -91,12 +116,23 @@
             text-align: center;
             display: none;
         }
+        .tip {
+            text-align: center;
+            font-size: 0.78rem;
+            color: var(--muted);
+            margin-top: 1.1rem;
+        }
     </style>
 </head>
 <body>
     <div class="login-card">
         <h1>Keep</h1>
-        <form id="loginForm" onsubmit="handleLogin(event)">
+        <div class="tabs">
+            <button class="tab active" id="tabLogin" onclick="switchTab('login')">登录</button>
+            <button class="tab" id="tabRegister" onclick="switchTab('register')">注册</button>
+        </div>
+
+        <form id="loginForm" onsubmit="handleLogin(event)" style="display:block;">
             <div class="form-group">
                 <label for="username">账号</label>
                 <input type="text" id="username" placeholder="请输入账号" required autocomplete="username">
@@ -105,16 +141,42 @@
                 <label for="password">密码</label>
                 <input type="password" id="password" placeholder="请输入密码" required autocomplete="current-password">
             </div>
-            <button type="submit" class="btn-login" id="submitBtn">登录</button>
-            <div class="error-msg" id="errorMsg"></div>
+            <button type="submit" class="btn-login" id="loginBtn">登录</button>
+            <div class="error-msg" id="loginErr"></div>
         </form>
+
+        <form id="registerForm" onsubmit="handleRegister(event)" style="display:none;">
+            <div class="form-group">
+                <label for="regUsername">账号</label>
+                <input type="text" id="regUsername" placeholder="2-32 个字符" required autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label for="regPassword">密码</label>
+                <input type="password" id="regPassword" placeholder="至少 6 位" required autocomplete="new-password">
+            </div>
+            <div class="form-group">
+                <label for="regPassword2">确认密码</label>
+                <input type="password" id="regPassword2" placeholder="再次输入密码" required autocomplete="new-password">
+            </div>
+            <button type="submit" class="btn-login" id="regBtn">注册</button>
+            <div class="error-msg" id="regErr"></div>
+        </form>
+
+        <div class="tip" id="modeTip">注册后为普通用户账号，仅可查看和记录自己的打卡</div>
     </div>
 
     <script>
+        function switchTab(mode) {
+            document.getElementById('tabLogin').classList.toggle('active', mode === 'login');
+            document.getElementById('tabRegister').classList.toggle('active', mode === 'register');
+            document.getElementById('loginForm').style.display = mode === 'login' ? 'block' : 'none';
+            document.getElementById('registerForm').style.display = mode === 'register' ? 'block' : 'none';
+        }
+
         async function handleLogin(e) {
             e.preventDefault();
-            const btn = document.getElementById('submitBtn');
-            const errEl = document.getElementById('errorMsg');
+            const btn = document.getElementById('loginBtn');
+            const errEl = document.getElementById('loginErr');
             errEl.style.display = 'none';
             btn.disabled = true;
             btn.textContent = '登录中...';
@@ -142,6 +204,48 @@
             } finally {
                 btn.disabled = false;
                 btn.textContent = '登录';
+            }
+        }
+
+        async function handleRegister(e) {
+            e.preventDefault();
+            const btn = document.getElementById('regBtn');
+            const errEl = document.getElementById('regErr');
+            errEl.style.display = 'none';
+
+            const username = document.getElementById('regUsername').value.trim();
+            const password = document.getElementById('regPassword').value;
+            const password2 = document.getElementById('regPassword2').value;
+
+            if (password !== password2) {
+                errEl.textContent = '两次输入的密码不一致';
+                errEl.style.display = 'block';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '注册中...';
+
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                if (res.ok) {
+                    window.location.href = '/';
+                } else {
+                    const data = await res.json().catch(() => ({}));
+                    errEl.textContent = data.error || '注册失败，请稍后重试';
+                    errEl.style.display = 'block';
+                }
+            } catch (err) {
+                errEl.textContent = '网络请求失败，请稍后重试';
+                errEl.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '注册';
             }
         }
     </script>

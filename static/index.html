@@ -253,10 +253,27 @@
         }
         .heatmap-wrap::-webkit-scrollbar { display: none; }
         #heatmap {
+            position: relative;
             min-width: 0;
             flex-shrink: 0;
             -webkit-transform: translateZ(0);
             transform: translateZ(0);
+        }
+        #hmMonthLabels {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 0;
+            height: 0;
+            pointer-events: none;
+            z-index: 2;
+        }
+        #hmMonthLabels span {
+            position: absolute;
+            white-space: nowrap;
+            color: var(--muted);
+            font-size: var(--month-label-size, 13px);
+            transform: translateX(-50%);
         }
         .hm-scrollbar {
             position: relative;
@@ -587,6 +604,7 @@
         </div>
         <div class="heatmap-wrap">
             <div id="heatmap"></div>
+            <div id="hmMonthLabels"></div>
         </div>
         <div class="hm-scrollbar" id="hmScrollbar">
             <div class="hm-scroll-thumb" id="hmScrollThumb"></div>
@@ -594,7 +612,7 @@
         <div class="legend" id="legend"></div>
     </div>
     <footer>
-        <a href="/manage.html">⚙️ 事件类型配置</a>
+        <span id="footerLinks"></span>
     </footer>
 </div>
 
@@ -776,8 +794,89 @@ function syncScrollbar() {
     thumb.style.left = Math.round(p * (tw - thw)) + 'px';
 }
 
+// 需要滚动时，页面打开后的首次渲染把当前月份放到可视区中间，不用手动滑动找
+// 返回 true 表示已成功居中（调用方据此决定不再重试）
+function centerOnCurrentMonth(wrap, cell) {
+    const maxScroll = wrap.scrollWidth - wrap.clientWidth;
+    if (maxScroll <= 0) return false;
+    const m = new Date().getMonth() + 1;
+    const dateStr = year + '-' + String(m).padStart(2, '0') + '-01';
+    const px = chart.convertToPixel({ coordSysName: 'calendar', calendarIndex: 0 }, dateStr);
+    if (!px || typeof px[0] !== 'number') return false;
+    const monthCols = weeksBetweenMonths(year, m, m);
+    const midX = px[0] + (monthCols - 1) * cell / 2;
+    let target = midX - wrap.clientWidth / 2;
+    target = Math.max(0, Math.min(maxScroll, target));
+    wrap.scrollLeft = target;
+    syncScrollbar();
+    layoutMonthLabels();
+    return true;
+}
+
+// 月份标签覆盖层：标签贴在各自月份首日所在列的中心；
+// 当该列被可视区右缘切掉（或完全滚出可视区）时隐藏标签，避免"4月露头"
+function layoutMonthLabels() {
+    const el = document.getElementById('hmMonthLabels');
+    const wrap = document.querySelector('.heatmap-wrap');
+    if (!el || !chart || chart.isDisposed()) return;
+    if (!el.__spans) {
+        el.__spans = [];
+        for (let m = 1; m <= 12; m++) {
+            const span = document.createElement('span');
+            span.textContent = m + '月';
+            el.appendChild(span);
+            el.__spans.push(span);
+        }
+    }
+    const cw = wrap.clientWidth;
+    for (let m = 1; m <= 12; m++) {
+        const span = el.__spans[m - 1];
+        const dateStr = year + '-' + String(m).padStart(2, '0') + '-01';
+        const px = chart.convertToPixel({ coordSysName: 'calendar', calendarIndex: 0 }, dateStr);
+        if (!px || typeof px[0] !== 'number') { span.style.visibility = 'hidden'; continue; }
+        const x = px[0] - wrap.scrollLeft;
+        span.style.left = x + 'px';
+        // 整列超出可视区，或右缘被切掉 → 隐藏标签
+        span.style.visibility = (x < -40 || x > cw - 8) ? 'hidden' : 'visible';
+    }
+}
+
 // ============ 初始化 ============
+async function loadMe() {
+    try {
+        const res = await fetch('/api/me');
+        if (res.status === 401) { window.location.href = '/login.html'; return; }
+        if (res.ok) {
+            window.__me = await res.json();
+            renderFooterLinks();
+        }
+    } catch (_) {}
+}
+
+function renderFooterLinks() {
+    const el = document.getElementById('footerLinks');
+    const me = window.__me;
+    if (!el || !me) return;
+    let html = '';
+    if (me.role === 'admin') {
+        html += '<a href="/manage.html">⚙️ 事件类型配置</a>';
+        html += ' &nbsp;<a href="/users.html">👥 用户管理</a>';
+    }
+    if (me.username) {
+        html += ' &nbsp;<span style="opacity:.75">' + escapeHtml(me.username) + '</span>';
+        html += ' &nbsp;<a href="#" onclick="doLogout(event)">退出</a>';
+    }
+    el.innerHTML = html;
+}
+
+async function doLogout(e) {
+    e.preventDefault();
+    try { await fetch('/api/logout', { method: 'POST' }); } catch (_) {}
+    window.location.href = '/login.html';
+}
+
 async function init() {
+    await loadMe();
     await loadSourceColorsFromDB();
     const yearSel = document.getElementById('year');
     const cy = new Date().getFullYear();
@@ -830,7 +929,11 @@ async function init() {
     if (heatWrap && track && thumb) {
         heatWrap.addEventListener('scroll', function () {
             if (window.__sbRaf) return;
-            window.__sbRaf = requestAnimationFrame(function () { window.__sbRaf = 0; syncScrollbar(); });
+            window.__sbRaf = requestAnimationFrame(function () {
+                window.__sbRaf = 0;
+                syncScrollbar();
+                layoutMonthLabels();
+            });
         });
         heatWrap.addEventListener('wheel', function (e) {
             if (heatWrap.scrollWidth <= heatWrap.clientWidth) return;
@@ -1011,7 +1114,7 @@ function weeksBetweenMonths(y, s, e) {
     monday.setDate(start.getDate() - ((start.getDay() + 6) % 7));
     const sunday = new Date(end);
     sunday.setDate(end.getDate() + ((7 - end.getDay()) % 7));
-    return Math.round((sunday - monday) / msPerDay / 7) + 1;
+    return Math.floor((sunday - monday) / msPerDay / 7) + 1;
 }
 
 let detailDate = null;
@@ -1205,9 +1308,14 @@ function renderHeatmap() {
         if (isCombined) color = getCombinedColor(stats);
         else {
             const sc = getColor(currentSource);
-            let opacity = sc.is_low_freq
-                ? Math.min(1, 0.65 + (stats.total - 1) * 0.12)
-                : Math.min(1, Math.max(0.3, stats.total / 10));
+            let opacity;
+            if (sc.is_low_freq) {
+                opacity = Math.min(1, 0.65 + (stats.total - 1) * 0.12);
+            } else {
+                // 贴合图例四档亮度：1次=少、2次=中、3次=较多、4次及以上=多（最高亮度）
+                const step = [0.35, 0.65, 0.85, 1.0];
+                opacity = stats.total >= 4 ? 1.0 : step[Math.max(0, stats.total - 1)];
+            }
             color = `rgba(${sc.rgb},${opacity})`;
         }
         return {
@@ -1235,7 +1343,10 @@ function renderHeatmap() {
     // 自适应可见月数：手机≥3个月、平板约6个月、中屏约8个月、桌面(≥1280)完整12个月
     // 整年连续渲染不切断，超出可视区域时左右滑动 + 进度条查看
     const targetMonths = vw < 640 ? 3 : vw < 1024 ? 6 : vw < 1280 ? 8 : 12;
-    const targetCols = weeksBetweenMonths(year, 1, targetMonths);
+    // 滚动视图（手机/平板）减去"跨月边界列"（该列同时含上月末+下月初，
+    // 完整显示它必然带出下月前几天），从而让 3/6 个月窗口内零露出下月内容
+    const fullCols = weeksBetweenMonths(year, 1, targetMonths);
+    const targetCols = vw < 1280 ? Math.max(1, fullCols - 1) : fullCols;
     const calCols = 53;
     const calRange = year.toString();
 
@@ -1244,9 +1355,18 @@ function renderHeatmap() {
     if (avail < 80) avail = vw - 24;
 
     const leftPad = isNarrow ? 18 : (isTablet ? 28 : 48);
-    const rightPad = isNarrow ? 4 : (isTablet ? 12 : 24);
-    let cell = Math.floor((avail - leftPad - rightPad) / targetCols);
-    cell = Math.max(10, Math.min(26, cell));
+    // 滚动视图（手机/平板）右缘贴边，让"跨月边界列"整列压在视口外；桌面完整展示留右边距
+    const rightPad = vw < 1280 ? 0 : 24;
+    let cell;
+    if (vw < 1280) {
+        // 小数格子：让前 targetCols 列恰好填满可视宽度，
+        // 下一列（跨月边界列）整列压在右缘外，滚动窗口内零露出下月内容
+        cell = (avail - leftPad - rightPad) / targetCols;
+        cell = Math.max(10, Math.min(32, cell));
+    } else {
+        cell = Math.floor((avail - leftPad - rightPad) / targetCols);
+        cell = Math.max(10, Math.min(32, cell));
+    }
 
     const usedOutside =
         (document.querySelector('h1')?.offsetHeight || 40) +
@@ -1283,6 +1403,7 @@ function renderHeatmap() {
         }
         const labelSize = Math.max(9, Math.min(13, Math.floor(cell * 0.7)));
         const monthSize = Math.max(10, Math.min(13, Math.floor(cell * 0.75)));
+        document.documentElement.style.setProperty('--month-label-size', monthSize + 'px');
         chart.setOption({
             backgroundColor: 'transparent',
             animation: false,
@@ -1324,13 +1445,17 @@ function renderHeatmap() {
                     nameMap: ['', '一', '', '三', '', '五', ''],
                     fontSize: labelSize
                 },
-                monthLabel: { color: cMuted, fontSize: monthSize }
+                monthLabel: { show: false }  // 月份标签改用 HTML 覆盖层（可在边缘被切时隐藏）
             },
             series: { type: 'heatmap', coordinateSystem: 'calendar', data: chartData }
         }, true);
         requestAnimationFrame(() => {
             if (chart && !chart.isDisposed()) chart.resize({ width: graphW, height: graphH });
             syncScrollbar();
+            layoutMonthLabels();
+            if (!window.__initedCentered) {
+                if (centerOnCurrentMonth(wrap, cell)) window.__initedCentered = true;
+            }
         });
     };
     requestAnimationFrame(draw);
@@ -1338,13 +1463,16 @@ function renderHeatmap() {
 
 function getCombinedColor(stats) {
     const sources = Object.entries(stats.src);
+    // 贴合图例四档亮度：1次=少、2次=中、3次=较多、4次及以上=多（最高亮度）
+    const step = [0.35, 0.65, 0.85, 1.0];
+    const op = (t) => t >= 4 ? 1.0 : step[Math.max(0, t - 1)];
     if (combineMode === 'winner') {
         let winner = 'default', max = 0;
         sources.forEach(([src, cnt]) => { if (cnt > max) { max = cnt; winner = src; } });
         const sc = getColor(winner);
         const opacity = sc.is_low_freq
             ? Math.min(1, 0.65 + (stats.total - 1) * 0.12)
-            : Math.min(1, Math.max(0.3, stats.total / 12));
+            : op(stats.total);
         return `rgba(${sc.rgb},${opacity})`;
     }
     if (combineMode === 'blend') {
@@ -1354,9 +1482,9 @@ function getCombinedColor(stats) {
             const w = cnt / stats.total;
             r += rgb[0] * w; g += rgb[1] * w; b += rgb[2] * w;
         });
-        return `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${Math.min(1, Math.max(0.3, stats.total / 12))})`;
+        return `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${op(stats.total)})`;
     }
-    return `rgba(35,134,54,${Math.min(1, Math.max(0.3, stats.total / 18))})`;
+    return `rgba(35,134,54,${op(stats.total)})`;
 }
 
 window.addEventListener('resize', () => {
@@ -1381,4 +1509,3 @@ init();
 </script>
 </body>
 </html>
-<!-- （注：内容由AI生成） -->

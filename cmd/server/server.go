@@ -1,6 +1,8 @@
 package main
 
 import (
+    "context"
+    "crypto/rand"
     "crypto/sha256"
     "database/sql"
     "encoding/hex"
@@ -11,6 +13,7 @@ import (
     "os"
     "strconv"
     "strings"
+    "sync"
     "time"
     "unicode/utf8"
 
@@ -36,13 +39,39 @@ type EventSourceConfig struct {
     SortOrder int    `json:"sort_order"`
 }
 
+type User struct {
+    ID        int64  `json:"id"`
+    Username  string `json:"username"`
+    Role      string `json:"role"`
+    CreatedAt string `json:"created_at"`
+    Count     int    `json:"count"`
+}
+
+type sessionUser struct {
+    ID       int64
+    Username string
+    Role     string
+}
+
 var db *sql.DB
 var appLocation *time.Location
 
 // Auth 全局配置
 var authUsername string
 var authPassword string
-var expectedToken string
+
+// 多用户会话（内存态，重启后需重新登录）
+var (
+    sessions   = map[string]sessionUser{}
+    sessionsMu sync.RWMutex
+)
+
+// 管理员用户 ID（docker 环境变量创建的账号）
+var adminUserID int64
+
+type ctxKey int
+
+const userKey ctxKey = 0
 
 func initLocation() {
     tz := os.Getenv("TZ")
@@ -68,12 +97,24 @@ func initAuth() {
     }
     authPassword = os.Getenv("AUTH_PASSWORD")
     if authPassword != "" {
-        h := sha256.Sum256([]byte("keep_salt_" + authPassword + "_" + authUsername))
-        expectedToken = hex.EncodeToString(h[:])
-        log.Printf("🔒 Auth enabled for user: %s", authUsername)
+        log.Printf("🔒 Auth enabled, admin user: %s", authUsername)
     } else {
-        log.Printf("🔓 Auth disabled (AUTH_PASSWORD not set)")
+        log.Printf("🔓 Auth disabled (AUTH_PASSWORD not set), single-user mode")
     }
+}
+
+func hashPassword(username, password string) string {
+    h := sha256.Sum256([]byte("keep_salt_" + password + "_" + username))
+    return hex.EncodeToString(h[:])
+}
+
+func randomToken() string {
+    b := make([]byte, 24)
+    if _, err := rand.Read(b); err != nil {
+        h := sha256.Sum256([]byte(fmt.Sprintf("%d-%s", time.Now().UnixNano(), authUsername)))
+        return hex.EncodeToString(h[:])
+    }
+    return hex.EncodeToString(b)
 }
 
 func main() {
@@ -103,41 +144,16 @@ func main() {
         log.Printf("⚠️  Failed to set busy_timeout: %v", err)
     }
 
-    createTableSQL := `
-    CREATE TABLE IF NOT EXISTS events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        source TEXT NOT NULL,
-        context TEXT,
-        timestamp DATETIME NOT NULL,
-        metadata TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(source, context, timestamp)
-    );
-    CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
-    CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
-
-    CREATE TABLE IF NOT EXISTS sources_config (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        emoji TEXT NOT NULL,
-        color TEXT NOT NULL,
-        is_low_freq INTEGER DEFAULT 0,
-        sort_order INTEGER DEFAULT 0
-    );
-    `
-
-    if _, err = db.Exec(createTableSQL); err != nil {
-        log.Fatalf("Failed to create table: %v", err)
-    }
-
-    // 旧库自动补字段
-    db.Exec("ALTER TABLE sources_config ADD COLUMN is_low_freq INTEGER DEFAULT 0")
-    db.Exec("ALTER TABLE sources_config ADD COLUMN sort_order INTEGER DEFAULT 0")
+    ensureSchema()
 
     mux := http.NewServeMux()
     mux.HandleFunc("/api/login", handleLogin)
+    mux.HandleFunc("/api/logout", handleLogout)
+    mux.HandleFunc("/api/register", handleRegister)
+    mux.HandleFunc("/api/me", handleMe)
     mux.HandleFunc("/api/contributions", handleContributions)
     mux.HandleFunc("/api/stats", handleGetStats)
+    mux.HandleFunc("/api/users", handleUsers)
     mux.HandleFunc("/api/health", handleHealth)
     mux.HandleFunc("/api/sources", handleSources)
     mux.HandleFunc("/api/sources/reorder", handleSourcesReorder)
@@ -157,12 +173,116 @@ func main() {
 
     fmt.Printf("🚀 Contribution Graph Server running on http://localhost:%s\n", port)
     fmt.Println("   Dashboard: /")
-    fmt.Println("   Manage:    /manage.html")
+    fmt.Println("   Manage:    /manage.html (admin only)")
+    fmt.Println("   Users:     /users.html (admin only)")
     fmt.Println("   Login:     /login.html")
+    fmt.Println("   Register:  POST /api/register")
     fmt.Println("   API:       POST /api/contributions")
     fmt.Println("   Sources:   GET/POST/DELETE /api/sources")
     fmt.Println("   Reorder:   PUT /api/sources/reorder")
     log.Fatal(http.ListenAndServe(":"+port, handler))
+}
+
+func ensureSchema() {
+    createTableSQL := `
+    CREATE TABLE IF NOT EXISTS events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source TEXT NOT NULL,
+        context TEXT,
+        timestamp DATETIME NOT NULL,
+        metadata TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        user_id INTEGER,
+        UNIQUE(source, context, timestamp, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
+    CREATE INDEX IF NOT EXISTS idx_events_user ON events(user_id);
+
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'user',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS sources_config (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        emoji TEXT NOT NULL,
+        color TEXT NOT NULL,
+        is_low_freq INTEGER DEFAULT 0,
+        sort_order INTEGER DEFAULT 0
+    );
+    `
+
+    // 旧库升级：events 表缺 user_id 列时重建（搬迁数据 + 唯一约束纳入 user_id）
+    var tblName string
+    err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='events'").Scan(&tblName)
+    hasOldEvents := err == nil
+    if hasOldEvents {
+        rows, qerr := db.Query("PRAGMA table_info(events)")
+        hasUserCol := false
+        if qerr == nil {
+            for rows.Next() {
+                var cid int
+                var name, ctype string
+                var notnull, pk int
+                var dflt interface{}
+                rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk)
+                if name == "user_id" {
+                    hasUserCol = true
+                }
+            }
+            rows.Close()
+        }
+        if !hasUserCol {
+            log.Printf("🛠️  Migrating events table: adding user_id column (rebuild)")
+            db.Exec("ALTER TABLE events RENAME TO events_old")
+            if _, err := db.Exec(createTableSQL); err != nil {
+                log.Fatalf("Failed to recreate events table: %v", err)
+            }
+            db.Exec(`
+                INSERT INTO events (id, source, context, timestamp, metadata, created_at, user_id)
+                SELECT id, source, context, timestamp, metadata, created_at, NULL FROM events_old
+            `)
+            db.Exec("DROP TABLE events_old")
+        }
+    } else {
+        if _, err := db.Exec(createTableSQL); err != nil {
+            log.Fatalf("Failed to create table: %v", err)
+        }
+    }
+
+    // 旧库自动补字段
+    db.Exec("ALTER TABLE sources_config ADD COLUMN is_low_freq INTEGER DEFAULT 0")
+    db.Exec("ALTER TABLE sources_config ADD COLUMN sort_order INTEGER DEFAULT 0")
+
+    // 确保管理员账号存在（docker 环境变量创建的用户默认为管理员）
+    var uid int64
+    err = db.QueryRow("SELECT id FROM users WHERE username = ?", authUsername).Scan(&uid)
+    if err != nil {
+        seedPwd := authPassword
+        if seedPwd == "" {
+            seedPwd = "admin" // 单用户模式默认种子，不参与登录校验
+        }
+        res, ierr := db.Exec(`
+            INSERT INTO users (username, password_hash, role)
+            VALUES (?, ?, 'admin')
+        `, authUsername, hashPassword(authUsername, seedPwd))
+        if ierr != nil {
+            log.Fatalf("Failed to seed admin user: %v", ierr)
+        }
+        uid, _ = res.LastInsertId()
+        log.Printf("👑 Seeded admin user: %s", authUsername)
+    }
+    adminUserID = uid
+
+    // 迁移：历史打卡数据归属管理员
+    if _, err := db.Exec("UPDATE events SET user_id = ? WHERE user_id IS NULL", uid); err != nil {
+        log.Printf("⚠️  Failed to backfill user_id: %v", err)
+    }
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
@@ -204,34 +324,87 @@ func isPublicPwaAsset(path string) bool {
     return false
 }
 
+func withUser(r *http.Request, su sessionUser) *http.Request {
+    return r.WithContext(context.WithValue(r.Context(), userKey, su))
+}
+
+func currentUser(r *http.Request) (sessionUser, bool) {
+    su, ok := r.Context().Value(userKey).(sessionUser)
+    return su, ok
+}
+
+func currentSession(r *http.Request) (sessionUser, bool) {
+    cookie, err := r.Cookie("auth_session")
+    if err != nil {
+        return sessionUser{}, false
+    }
+    sessionsMu.RLock()
+    su, ok := sessions[cookie.Value]
+    sessionsMu.RUnlock()
+    return su, ok
+}
+
+func setAuthCookie(w http.ResponseWriter, token string) {
+    http.SetCookie(w, &http.Cookie{
+        Name:     "auth_session",
+        Value:    token,
+        Path:     "/",
+        MaxAge:   315360000,
+        HttpOnly: true,
+        SameSite: http.SameSiteLaxMode,
+    })
+}
+
+func clearAuthCookie(w http.ResponseWriter) {
+    http.SetCookie(w, &http.Cookie{
+        Name:     "auth_session",
+        Value:    "",
+        Path:     "/",
+        MaxAge:   -1,
+        HttpOnly: true,
+        SameSite: http.SameSiteLaxMode,
+    })
+}
+
+func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(status)
+    json.NewEncoder(w).Encode(v)
+}
+
 func authMiddleware(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        // 单用户模式（未设置 AUTH_PASSWORD）：无需登录，一切视为管理员
         if authPassword == "" {
+            r = withUser(r, sessionUser{ID: adminUserID, Username: authUsername, Role: "admin"})
             next.ServeHTTP(w, r)
             return
         }
 
         path := r.URL.Path
 
-        if path == "/login.html" || path == "/api/login" || path == "/api/health" || isPublicPwaAsset(path) {
+        if path == "/login.html" || path == "/api/login" || path == "/api/register" || path == "/api/health" || isPublicPwaAsset(path) {
             next.ServeHTTP(w, r)
             return
         }
 
-        cookie, err := r.Cookie("auth_session")
-        isValid := (err == nil && cookie.Value == expectedToken)
-
-        if !isValid {
+        su, ok := currentSession(r)
+        if !ok {
             if strings.HasPrefix(path, "/api/") {
-                w.Header().Set("Content-Type", "application/json")
-                w.WriteHeader(http.StatusUnauthorized)
-                json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+                writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
                 return
             }
             http.Redirect(w, r, "/login.html", http.StatusSeeOther)
             return
         }
 
+        // 管理页面仅管理员可见
+        if (path == "/manage.html" || path == "/users.html") && su.Role != "admin" {
+            writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+            return
+        }
+
+        r = withUser(r, su)
         next.ServeHTTP(w, r)
     })
 }
@@ -252,26 +425,198 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    if authPassword != "" {
-        if req.Username != authUsername || req.Password != authPassword {
-            w.Header().Set("Content-Type", "application/json")
-            w.WriteHeader(http.StatusUnauthorized)
-            json.NewEncoder(w).Encode(map[string]string{"error": "账号或密码错误"})
-            return
-        }
+    username := strings.TrimSpace(req.Username)
+    var id int64
+    var role, hash string
+    err := db.QueryRow(`SELECT id, role, password_hash FROM users WHERE username = ?`, username).Scan(&id, &role, &hash)
+    if err != nil || hashPassword(username, req.Password) != hash {
+        writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "账号或密码错误"})
+        return
     }
 
-    http.SetCookie(w, &http.Cookie{
-        Name:     "auth_session",
-        Value:    expectedToken,
-        Path:     "/",
-        MaxAge:   315360000,
-        HttpOnly: true,
-        SameSite: http.SameSiteLaxMode,
-    })
+    token := randomToken()
+    sessionsMu.Lock()
+    sessions[token] = sessionUser{ID: id, Username: username, Role: role}
+    sessionsMu.Unlock()
 
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+    setAuthCookie(w, token)
+    writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "role": role, "username": username})
+}
+
+func handleLogout(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodPost {
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+        return
+    }
+    if cookie, err := r.Cookie("auth_session"); err == nil {
+        sessionsMu.Lock()
+        delete(sessions, cookie.Value)
+        sessionsMu.Unlock()
+    }
+    clearAuthCookie(w)
+    writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// 注册新用户（普通用户角色）
+func handleRegister(w http.ResponseWriter, r *http.Request) {
+    if r.Method != http.MethodPost {
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+        return
+    }
+    if authPassword == "" {
+        writeJSON(w, http.StatusBadRequest, map[string]string{"error": "未启用账号注册"})
+        return
+    }
+
+    var req struct {
+        Username string `json:"username"`
+        Password string `json:"password"`
+    }
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "Invalid JSON", http.StatusBadRequest)
+        return
+    }
+
+    username := strings.TrimSpace(req.Username)
+    nameRunes := []rune(username)
+    if len(nameRunes) < 2 || len(nameRunes) > 32 {
+        writeJSON(w, http.StatusBadRequest, map[string]string{"error": "用户名需 2-32 个字符"})
+        return
+    }
+    if utf8.RuneCountInString(req.Password) < 6 {
+        writeJSON(w, http.StatusBadRequest, map[string]string{"error": "密码至少 6 位"})
+        return
+    }
+
+    var exists string
+    err := db.QueryRow(`SELECT username FROM users WHERE username = ?`, username).Scan(&exists)
+    if err == nil {
+        writeJSON(w, http.StatusBadRequest, map[string]string{"error": "用户名已存在"})
+        return
+    }
+
+    res, err := db.Exec(`
+        INSERT INTO users (username, password_hash, role)
+        VALUES (?, ?, 'user')
+    `, username, hashPassword(username, req.Password))
+    if err != nil {
+        writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "注册失败，请稍后重试"})
+        return
+    }
+    id, _ := res.LastInsertId()
+
+    // 注册后自动登录
+    token := randomToken()
+    sessionsMu.Lock()
+    sessions[token] = sessionUser{ID: id, Username: username, Role: "user"}
+    sessionsMu.Unlock()
+    setAuthCookie(w, token)
+
+    writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "role": "user", "username": username})
+    fmt.Printf("👤 New user registered: %s\n", username)
+}
+
+// GET /api/me  当前登录用户信息
+func handleMe(w http.ResponseWriter, r *http.Request) {
+    su, ok := currentUser(r)
+    if !ok {
+        writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+        return
+    }
+    writeJSON(w, http.StatusOK, map[string]string{"username": su.Username, "role": su.Role})
+}
+
+// 用户管理：仅管理员。GET 列表 / DELETE?id=N 删除普通用户及其全部数据
+func handleUsers(w http.ResponseWriter, r *http.Request) {
+    su, ok := currentUser(r)
+    if !ok || su.Role != "admin" {
+        writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+        return
+    }
+
+    switch r.Method {
+    case http.MethodGet:
+        rows, err := db.Query(`
+            SELECT u.id, u.username, u.role, u.created_at,
+                   (SELECT COUNT(*) FROM events e WHERE e.user_id = u.id) AS cnt
+            FROM users u
+            ORDER BY u.role DESC, u.id ASC
+        `)
+        if err != nil {
+            http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+            return
+        }
+        defer rows.Close()
+
+        var users []User
+        for rows.Next() {
+            var u User
+            var createdAt string
+            if err := rows.Scan(&u.ID, &u.Username, &u.Role, &createdAt, &u.Count); err == nil {
+                u.CreatedAt = createdAt
+                users = append(users, u)
+            }
+        }
+        if users == nil {
+            users = []User{}
+        }
+        writeJSON(w, http.StatusOK, users)
+
+    case http.MethodDelete:
+        idStr := r.URL.Query().Get("id")
+        if idStr == "" {
+            http.Error(w, "missing id parameter", http.StatusBadRequest)
+            return
+        }
+        id, err := strconv.ParseInt(idStr, 10, 64)
+        if err != nil || id <= 0 {
+            http.Error(w, "invalid id parameter", http.StatusBadRequest)
+            return
+        }
+        if id == su.ID {
+            writeJSON(w, http.StatusBadRequest, map[string]string{"error": "不能删除当前登录的账号"})
+            return
+        }
+
+        var role string
+        err = db.QueryRow(`SELECT role FROM users WHERE id = ?`, id).Scan(&role)
+        if err != nil {
+            writeJSON(w, http.StatusNotFound, map[string]string{"error": "用户不存在"})
+            return
+        }
+        if role != "user" {
+            writeJSON(w, http.StatusBadRequest, map[string]string{"error": "只能删除普通用户"})
+            return
+        }
+
+        tx, err := db.Begin()
+        if err != nil {
+            http.Error(w, "Database error", http.StatusInternalServerError)
+            return
+        }
+        resE, errE := tx.Exec(`DELETE FROM events WHERE user_id = ?`, id)
+        _, errU := tx.Exec(`DELETE FROM users WHERE id = ?`, id)
+        if errE != nil || errU != nil {
+            tx.Rollback()
+            http.Error(w, "Database error", http.StatusInternalServerError)
+            return
+        }
+        if err := tx.Commit(); err != nil {
+            http.Error(w, "Database error", http.StatusInternalServerError)
+            return
+        }
+
+        n, _ := resE.RowsAffected()
+        fmt.Printf("🗑️  Deleted user id=%d and %d contributions\n", id, n)
+        writeJSON(w, http.StatusOK, map[string]interface{}{
+            "status":         "success",
+            "deleted_events": n,
+            "deleted_user":   1,
+        })
+
+    default:
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+    }
 }
 
 func handleContributions(w http.ResponseWriter, r *http.Request) {
@@ -290,6 +635,8 @@ func handleContributions(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePostContribution(w http.ResponseWriter, r *http.Request) {
+    su, _ := currentUser(r)
+
     var contributions []Contribution
     if err := json.NewDecoder(r.Body).Decode(&contributions); err != nil {
         http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
@@ -303,8 +650,8 @@ func handlePostContribution(w http.ResponseWriter, r *http.Request) {
     }
 
     stmt, err := tx.Prepare(`
-        INSERT OR IGNORE INTO events (source, context, timestamp, metadata)
-        VALUES (?, ?, ?, ?)
+        INSERT OR IGNORE INTO events (source, context, timestamp, metadata, user_id)
+        VALUES (?, ?, ?, ?, ?)
     `)
     if err != nil {
         tx.Rollback()
@@ -323,7 +670,7 @@ func handlePostContribution(w http.ResponseWriter, r *http.Request) {
         localTs := c.Timestamp.In(appLocation)
         localStr := localTs.Format("2006-01-02 15:04:05")
 
-        if _, err := stmt.Exec(c.Source, c.Context, localStr, metaString); err == nil {
+        if _, err := stmt.Exec(c.Source, c.Context, localStr, metaString, su.ID); err == nil {
             count++
         }
     }
@@ -333,17 +680,17 @@ func handlePostContribution(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(http.StatusCreated)
-    json.NewEncoder(w).Encode(map[string]interface{}{
+    writeJSON(w, http.StatusCreated, map[string]interface{}{
         "processed": count,
         "message":   fmt.Sprintf("Processed %d contributions", count),
     })
-    fmt.Printf("📥 Received %d events (from %d submitted)\n", count, len(contributions))
+    fmt.Printf("📥 Received %d events (from %d submitted) by user %s\n", count, len(contributions), su.Username)
 }
 
-// DELETE /api/contributions?id=<event_id>  删除单条打卡记录
+// DELETE /api/contributions?id=<event_id>  删除单条打卡记录（仅限本人）
 func handleDeleteContribution(w http.ResponseWriter, r *http.Request) {
+    su, _ := currentUser(r)
+
     idStr := r.URL.Query().Get("id")
     if idStr == "" {
         http.Error(w, "missing id parameter", http.StatusBadRequest)
@@ -355,24 +702,23 @@ func handleDeleteContribution(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    res, err := db.Exec(`DELETE FROM events WHERE id = ?`, id)
+    res, err := db.Exec(`DELETE FROM events WHERE id = ? AND user_id = ?`, id, su.ID)
     if err != nil {
         http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
         return
     }
 
     n, _ := res.RowsAffected()
-    w.Header().Set("Content-Type", "application/json")
     if n == 0 {
-        w.WriteHeader(http.StatusNotFound)
-        json.NewEncoder(w).Encode(map[string]interface{}{"status": "not_found", "deleted": 0})
+        writeJSON(w, http.StatusNotFound, map[string]interface{}{"status": "not_found", "deleted": 0})
         return
     }
-    fmt.Printf("🗑️  Deleted event id=%d (%d row)\n", id, n)
-    json.NewEncoder(w).Encode(map[string]interface{}{"status": "success", "deleted": n})
+    fmt.Printf("🗑️  Deleted event id=%d (%d row) by user %s\n", id, n, su.Username)
+    writeJSON(w, http.StatusOK, map[string]interface{}{"status": "success", "deleted": n})
 }
 
 func handleGetContributions(w http.ResponseWriter, r *http.Request) {
+    su, _ := currentUser(r)
     year := r.URL.Query().Get("year")
     source := r.URL.Query().Get("source")
 
@@ -391,9 +737,9 @@ func handleGetContributions(w http.ResponseWriter, r *http.Request) {
     query := `
         SELECT id, source, context, timestamp, metadata
         FROM events
-        WHERE timestamp >= ? AND timestamp < ?
+        WHERE timestamp >= ? AND timestamp < ? AND user_id = ?
     `
-    args := []interface{}{startDate, endDate}
+    args := []interface{}{startDate, endDate, su.ID}
 
     if source != "" {
         query += " AND source = ?"
@@ -432,23 +778,24 @@ func handleGetContributions(w http.ResponseWriter, r *http.Request) {
         events = []Contribution{}
     }
 
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(events)
+    writeJSON(w, http.StatusOK, events)
 }
 
 func handleGetStats(w http.ResponseWriter, r *http.Request) {
+    su, _ := currentUser(r)
     stats := make(map[string]interface{})
 
     var total int
-    db.QueryRow("SELECT COUNT(*) FROM events").Scan(&total)
+    db.QueryRow("SELECT COUNT(*) FROM events WHERE user_id = ?", su.ID).Scan(&total)
     stats["total"] = total
 
     rows, err := db.Query(`
         SELECT source, COUNT(*) as count
         FROM events
+        WHERE user_id = ?
         GROUP BY source
         ORDER BY count DESC
-    `)
+    `, su.ID)
     if err == nil {
         defer rows.Close()
         sources := make(map[string]int)
@@ -461,26 +808,34 @@ func handleGetStats(w http.ResponseWriter, r *http.Request) {
         stats["by_source"] = sources
     }
 
-    stats["current_streak"] = calculateStreak()
+    stats["current_streak"] = calculateStreak(su.ID)
 
     todayStr := time.Now().In(appLocation).Format("2006-01-02")
     var today int
     db.QueryRow(`
         SELECT COUNT(*) FROM events
-        WHERE date(timestamp) = ?
-    `, todayStr).Scan(&today)
+        WHERE date(timestamp) = ? AND user_id = ?
+    `, todayStr, su.ID).Scan(&today)
     stats["today"] = today
     stats["timezone"] = appLocation.String()
     stats["today_date"] = todayStr
 
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(stats)
+    writeJSON(w, http.StatusOK, stats)
 }
 
 func handleSources(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodOptions {
         w.WriteHeader(http.StatusOK)
         return
+    }
+
+    // 事件类型是全局配置：仅管理员可增删改，普通用户只读
+    if r.Method != http.MethodGet {
+        su, ok := currentUser(r)
+        if !ok || su.Role != "admin" {
+            writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+            return
+        }
     }
 
     switch r.Method {
@@ -508,8 +863,7 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
         if configs == nil {
             configs = []EventSourceConfig{}
         }
-        w.Header().Set("Content-Type", "application/json")
-        json.NewEncoder(w).Encode(configs)
+        writeJSON(w, http.StatusOK, configs)
 
     case http.MethodPost:
         var c EventSourceConfig
@@ -584,9 +938,7 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
             }
         }
 
-        w.Header().Set("Content-Type", "application/json")
-        w.WriteHeader(http.StatusOK)
-        json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+        writeJSON(w, http.StatusOK, map[string]string{"status": "success"})
 
     case http.MethodDelete:
         source := r.URL.Query().Get("source")
@@ -612,8 +964,7 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
         affectedEvents, _ := resEvents.RowsAffected()
         affectedConfig, _ := resConfig.RowsAffected()
 
-        w.Header().Set("Content-Type", "application/json")
-        json.NewEncoder(w).Encode(map[string]interface{}{
+        writeJSON(w, http.StatusOK, map[string]interface{}{
             "deleted_events": affectedEvents,
             "deleted_config": affectedConfig,
             "source":         source,
@@ -633,6 +984,12 @@ func handleSourcesReorder(w http.ResponseWriter, r *http.Request) {
     }
     if r.Method != http.MethodPut && r.Method != http.MethodPost {
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+        return
+    }
+
+    su, ok := currentUser(r)
+    if !ok || su.Role != "admin" {
+        writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
         return
     }
 
@@ -675,20 +1032,20 @@ func handleSourcesReorder(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]interface{}{
+    writeJSON(w, http.StatusOK, map[string]interface{}{
         "status": "success",
         "count":  len(items),
     })
 }
 
-func calculateStreak() int {
+func calculateStreak(userID int64) int {
     rows, err := db.Query(`
         SELECT DISTINCT date(timestamp) as day
         FROM events
+        WHERE user_id = ?
         ORDER BY day DESC
         LIMIT 365
-    `)
+    `, userID)
     if err != nil {
         return 0
     }
@@ -721,8 +1078,7 @@ func calculateStreak() int {
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(map[string]interface{}{
+    writeJSON(w, http.StatusOK, map[string]interface{}{
         "status":   "ok",
         "timezone": appLocation.String(),
         "now":      time.Now().In(appLocation).Format(time.RFC3339),
@@ -736,6 +1092,4 @@ func mustAtoi(s string) int {
     }
     return n
 }
-
-// 避免未使用导入告警（utf8 用于可能的扩展校验）
-var _ = utf8.RuneCountInString
+//（注：内容由AI生成）
