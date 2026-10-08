@@ -242,11 +242,11 @@
         </div>
         <div class="stat">
             <div class="stat-val" id="statStreak">0</div>
-            <div class="stat-lbl">连续</div>
+            <div class="stat-lbl">🔥 连续</div>
         </div>
         <div class="stat">
             <div class="stat-val" id="statSources">0</div>
-            <div class="stat-lbl">事件数量</div>
+            <div class="stat-lbl">来源数</div>
         </div>
     </div>
 
@@ -262,9 +262,9 @@
             </div>
             <div style="display:flex;gap:0.5rem;align-items:center;">
                 <select id="combineMode" style="display:none;" title="合并方式">
-                    <option value="winner">热度</option>
-                    <option value="blend">混合</option>
-                    <option value="stack">总计</option>
+                    <option value="winner">主导来源</option>
+                    <option value="blend">颜色混合</option>
+                    <option value="stack">叠加总量</option>
                 </select>
                 <select id="year"></select>
             </div>
@@ -276,14 +276,14 @@
     </div>
 
     <footer>
-        <a href="/mobile.html">记录</a> ·
+        <a href="/mobile.html">📱 手机打卡</a> ·
         <a href="https://github.com/EWEpTM/contribution-graph11">GitHub</a>
     </footer>
 </div>
 
 <script>
 const DEFAULT_PRESETS = {
-    'default': { rgb: '139,148,158', hex: '#8b949e', name: '其他' }
+    'default': { rgb: '139,148,158', hex: '#8b949e', name: '其他', is_low_freq: false }
 };
 
 let sourceColors = { ...DEFAULT_PRESETS };
@@ -307,7 +307,8 @@ async function loadSourceColorsFromDB() {
                     map[e.id] = {
                         rgb: hexToRgb(e.color),
                         hex: e.color || '#8b949e',
-                        name: e.name || e.id
+                        name: e.name || e.id,
+                        is_low_freq: !!e.is_low_freq
                     };
                 });
             }
@@ -329,7 +330,8 @@ function getColor(id) {
         sourceColors[id] = {
             rgb: hexToRgb(hex),
             hex: hex,
-            name: id
+            name: id,
+            is_low_freq: false
         };
     }
     return sourceColors[id];
@@ -506,7 +508,13 @@ function renderHeatmap() {
             color = getCombinedColor(stats);
         } else {
             const sc = getColor(currentSource);
-            const opacity = Math.min(1, Math.max(0.3, stats.total / 10));
+            let opacity;
+            if (sc.is_low_freq) {
+                // 少量事件：打卡1次即为 0.65 正常亮度，多于1次渐变增亮至 1.0
+                opacity = Math.min(1, 0.65 + (stats.total - 1) * 0.12);
+            } else {
+                opacity = Math.min(1, Math.max(0.3, stats.total / 10));
+            }
             color = `rgba(${sc.rgb},${opacity})`;
         }
         return {
@@ -523,9 +531,9 @@ function renderHeatmap() {
     const legendColor = isCombined ? { rgb: '35,134,54', hex: '#238636' } : getColor(currentSource);
     document.getElementById('legend').innerHTML = `
         <div class="legend-item"><div class="legend-box" style="background:#161b22"></div>无</div>
-        <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.3)"></div>少</div>
-        <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.55)"></div>中</div>
-        <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.8)"></div>较多</div>
+        <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.35)"></div>少</div>
+        <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.65)"></div>中</div>
+        <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.85)"></div>较多</div>
         <div class="legend-item"><div class="legend-box" style="background:${legendColor.hex}"></div>多</div>
     `;
 
@@ -602,7 +610,12 @@ function getCombinedColor(stats) {
         let winner = 'default', max = 0;
         sources.forEach(([src, cnt]) => { if (cnt > max) { max = cnt; winner = src; } });
         const sc = getColor(winner);
-        const opacity = Math.min(1, Math.max(0.3, stats.total / 12));
+        let opacity;
+        if (sc.is_low_freq) {
+            opacity = Math.min(1, 0.65 + (stats.total - 1) * 0.12);
+        } else {
+            opacity = Math.min(1, Math.max(0.3, stats.total / 12));
+        }
         return `rgba(${sc.rgb},${opacity})`;
     }
     if (combineMode === 'blend') {

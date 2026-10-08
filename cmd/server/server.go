@@ -23,10 +23,11 @@ type Contribution struct {
 }
 
 type EventSourceConfig struct {
-    ID    string `json:"id"`
-    Name  string `json:"name"`
-    Emoji string `json:"emoji"`
-    Color string `json:"color"`
+    ID        string `json:"id"`
+    Name      string `json:"name"`
+    Emoji     string `json:"emoji"`
+    Color     string `json:"color"`
+    IsLowFreq bool   `json:"is_low_freq"`
 }
 
 var db *sql.DB
@@ -85,13 +86,17 @@ func main() {
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         emoji TEXT NOT NULL,
-        color TEXT NOT NULL
+        color TEXT NOT NULL,
+        is_low_freq INTEGER DEFAULT 0
     );
     `
 
     if _, err = db.Exec(createTableSQL); err != nil {
         log.Fatalf("Failed to create table: %v", err)
     }
+
+    // 给旧数据库自动补充 is_low_freq 字段
+    db.Exec("ALTER TABLE sources_config ADD COLUMN is_low_freq INTEGER DEFAULT 0")
 
     mux := http.NewServeMux()
     mux.HandleFunc("/api/contributions", handleContributions)
@@ -314,7 +319,7 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
 
     switch r.Method {
     case http.MethodGet:
-        rows, err := db.Query("SELECT id, name, emoji, color FROM sources_config")
+        rows, err := db.Query("SELECT id, name, emoji, color, is_low_freq FROM sources_config")
         if err != nil {
             http.Error(w, err.Error(), http.StatusInternalServerError)
             return
@@ -324,7 +329,9 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
         var configs []EventSourceConfig
         for rows.Next() {
             var c EventSourceConfig
-            if err := rows.Scan(&c.ID, &c.Name, &c.Emoji, &c.Color); err == nil {
+            var isLowFreqInt int
+            if err := rows.Scan(&c.ID, &c.Name, &c.Emoji, &c.Color, &isLowFreqInt); err == nil {
+                c.IsLowFreq = isLowFreqInt == 1
                 configs = append(configs, c)
             }
         }
@@ -351,10 +358,15 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
             c.Color = "#8b949e"
         }
 
+        isLowFreqInt := 0
+        if c.IsLowFreq {
+            isLowFreqInt = 1
+        }
+
         _, err := db.Exec(`
-            INSERT INTO sources_config (id, name, emoji, color) VALUES (?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET name=excluded.name, emoji=excluded.emoji, color=excluded.color
-        `, c.ID, c.Name, c.Emoji, c.Color)
+            INSERT INTO sources_config (id, name, emoji, color, is_low_freq) VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET name=excluded.name, emoji=excluded.emoji, color=excluded.color, is_low_freq=excluded.is_low_freq
+        `, c.ID, c.Name, c.Emoji, c.Color, isLowFreqInt)
 
         if err != nil {
             http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
