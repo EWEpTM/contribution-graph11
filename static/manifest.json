@@ -3,7 +3,7 @@
   "name": "Keep 热力图",
   "short_name": "Keep",
   "description": "个人活动打卡与热力图",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "browser"],
@@ -14,12 +14,6 @@
   "dir": "ltr",
   "categories": ["productivity", "utilities"],
   "icons": [
-    {
-      "src": "/apple-touch-icon.png",
-      "sizes": "180x180",
-      "type": "image/png",
-      "purpose": "any"
-    },
     {
       "src": "/icon-192.png",
       "sizes": "192x192",

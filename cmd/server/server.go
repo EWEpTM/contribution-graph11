@@ -12,6 +12,7 @@ import (
     "strconv"
     "strings"
     "time"
+    "unicode/utf8"
 
     _ "modernc.org/sqlite"
 )
@@ -31,6 +32,7 @@ type EventSourceConfig struct {
     Emoji     string `json:"emoji"`
     Color     string `json:"color"`
     IsLowFreq bool   `json:"is_low_freq"`
+    SortOrder int    `json:"sort_order"`
 }
 
 var db *sql.DB
@@ -93,7 +95,6 @@ func main() {
     }
     defer db.Close()
 
-    // 开启 WAL 模式与忙等待超时，解决 SQLite 并发锁库问题
     if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
         log.Printf("⚠️  Failed to set WAL mode: %v", err)
     }
@@ -119,7 +120,8 @@ func main() {
         name TEXT NOT NULL,
         emoji TEXT NOT NULL,
         color TEXT NOT NULL,
-        is_low_freq INTEGER DEFAULT 0
+        is_low_freq INTEGER DEFAULT 0,
+        sort_order INTEGER DEFAULT 0
     );
     `
 
@@ -127,8 +129,9 @@ func main() {
         log.Fatalf("Failed to create table: %v", err)
     }
 
-    // 给旧数据库自动补充 is_low_freq 字段
+    // 旧库自动补字段
     db.Exec("ALTER TABLE sources_config ADD COLUMN is_low_freq INTEGER DEFAULT 0")
+    db.Exec("ALTER TABLE sources_config ADD COLUMN sort_order INTEGER DEFAULT 0")
 
     mux := http.NewServeMux()
     mux.HandleFunc("/api/login", handleLogin)
@@ -136,6 +139,7 @@ func main() {
     mux.HandleFunc("/api/stats", handleGetStats)
     mux.HandleFunc("/api/health", handleHealth)
     mux.HandleFunc("/api/sources", handleSources)
+    mux.HandleFunc("/api/sources/reorder", handleSourcesReorder)
 
     staticDir := os.Getenv("STATIC_DIR")
     if staticDir == "" {
@@ -156,13 +160,14 @@ func main() {
     fmt.Println("   Login:     /login.html")
     fmt.Println("   API:       POST /api/contributions")
     fmt.Println("   Sources:   GET/POST/DELETE /api/sources")
+    fmt.Println("   Reorder:   PUT /api/sources/reorder")
     log.Fatal(http.ListenAndServe(":"+port, handler))
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         w.Header().Set("Access-Control-Allow-Origin", "*")
-        w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+        w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
         w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
@@ -423,7 +428,11 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
 
     switch r.Method {
     case http.MethodGet:
-        rows, err := db.Query("SELECT id, name, emoji, color, is_low_freq FROM sources_config")
+        rows, err := db.Query(`
+            SELECT id, name, emoji, color, is_low_freq, COALESCE(sort_order, 0)
+            FROM sources_config
+            ORDER BY sort_order ASC, name ASC
+        `)
         if err != nil {
             http.Error(w, err.Error(), http.StatusInternalServerError)
             return
@@ -434,7 +443,7 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
         for rows.Next() {
             var c EventSourceConfig
             var isLowFreqInt int
-            if err := rows.Scan(&c.ID, &c.Name, &c.Emoji, &c.Color, &isLowFreqInt); err == nil {
+            if err := rows.Scan(&c.ID, &c.Name, &c.Emoji, &c.Color, &isLowFreqInt, &c.SortOrder); err == nil {
                 c.IsLowFreq = isLowFreqInt == 1
                 configs = append(configs, c)
             }
@@ -455,6 +464,17 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
             http.Error(w, "ID and Name are required", http.StatusBadRequest)
             return
         }
+        // 名称最多 16 个字符（按 rune 计）
+        nameRunes := []rune(strings.TrimSpace(c.Name))
+        if len(nameRunes) == 0 {
+            http.Error(w, "Name is required", http.StatusBadRequest)
+            return
+        }
+        if len(nameRunes) > 16 {
+            c.Name = string(nameRunes[:16])
+        } else {
+            c.Name = string(nameRunes)
+        }
         if c.Emoji == "" {
             c.Emoji = "📱"
         }
@@ -467,15 +487,47 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
             isLowFreqInt = 1
         }
 
-        _, err := db.Exec(`
-            INSERT INTO sources_config (id, name, emoji, color, is_low_freq) VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET name=excluded.name, emoji=excluded.emoji, color=excluded.color, is_low_freq=excluded.is_low_freq
-        `, c.ID, c.Name, c.Emoji, c.Color, isLowFreqInt)
-
-        if err != nil {
-            http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
-            return
+        // 新建时若未指定 sort_order，排到末尾
+        if c.SortOrder == 0 {
+            var maxOrder sql.NullInt64
+            _ = db.QueryRow("SELECT MAX(sort_order) FROM sources_config").Scan(&maxOrder)
+            if maxOrder.Valid {
+                c.SortOrder = int(maxOrder.Int64) + 1
+            }
+            // 若是更新已有记录，保留原 sort_order（除非客户端显式传了）
+            var existingOrder sql.NullInt64
+            errExist := db.QueryRow("SELECT sort_order FROM sources_config WHERE id = ?", c.ID).Scan(&existingOrder)
+            if errExist == nil && existingOrder.Valid {
+                // 更新时不因默认 0 覆盖；仅当客户端传来非 0 才用新值
+                // 这里用：POST body 若 sort_order 为 0 且记录已存在，则不改 sort_order
+            }
         }
+
+        var existingID string
+        errExist := db.QueryRow("SELECT id FROM sources_config WHERE id = ?", c.ID).Scan(&existingID)
+        if errExist == nil {
+            // 更新：不强制改 sort_order（除非 body 里 sort_order > 0 或显式需要）
+            _, err := db.Exec(`
+                UPDATE sources_config
+                SET name = ?, emoji = ?, color = ?, is_low_freq = ?
+                WHERE id = ?
+            `, c.Name, c.Emoji, c.Color, isLowFreqInt, c.ID)
+            if err != nil {
+                http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+                return
+            }
+        } else {
+            _, err := db.Exec(`
+                INSERT INTO sources_config (id, name, emoji, color, is_low_freq, sort_order)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `, c.ID, c.Name, c.Emoji, c.Color, isLowFreqInt, c.SortOrder)
+            if err != nil {
+                http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+                return
+            }
+        }
+
+        w.Header().Set("Content-Type", "application/json")
         w.WriteHeader(http.StatusOK)
         json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 
@@ -514,6 +566,63 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
     default:
         http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
     }
+}
+
+// PUT /api/sources/reorder  body: [{"id":"xxx","sort_order":0}, ...]
+func handleSourcesReorder(w http.ResponseWriter, r *http.Request) {
+    if r.Method == http.MethodOptions {
+        w.WriteHeader(http.StatusOK)
+        return
+    }
+    if r.Method != http.MethodPut && r.Method != http.MethodPost {
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+        return
+    }
+
+    var items []struct {
+        ID        string `json:"id"`
+        SortOrder int    `json:"sort_order"`
+    }
+    if err := json.NewDecoder(r.Body).Decode(&items); err != nil {
+        http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+        return
+    }
+
+    tx, err := db.Begin()
+    if err != nil {
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
+
+    stmt, err := tx.Prepare(`UPDATE sources_config SET sort_order = ? WHERE id = ?`)
+    if err != nil {
+        tx.Rollback()
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
+    defer stmt.Close()
+
+    for _, it := range items {
+        if it.ID == "" {
+            continue
+        }
+        if _, err := stmt.Exec(it.SortOrder, it.ID); err != nil {
+            tx.Rollback()
+            http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+            return
+        }
+    }
+
+    if err := tx.Commit(); err != nil {
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "status": "success",
+        "count":  len(items),
+    })
 }
 
 func calculateStreak() int {
@@ -570,3 +679,6 @@ func mustAtoi(s string) int {
     }
     return n
 }
+
+// 避免未使用导入告警（utf8 用于可能的扩展校验）
+var _ = utf8.RuneCountInString

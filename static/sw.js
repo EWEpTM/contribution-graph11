@@ -1,11 +1,12 @@
 /* Keep PWA Service Worker */
-const CACHE_STATIC = 'keep-static-v1';
-const CACHE_RUNTIME = 'keep-runtime-v1';
+const CACHE_STATIC = 'keep-static-v2';
+const CACHE_RUNTIME = 'keep-runtime-v2';
 
 const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/manage.html',
+  '/login.html',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
@@ -19,9 +20,7 @@ self.addEventListener('install', (event) => {
       .then((cache) =>
         Promise.all(
           PRECACHE_URLS.map((url) =>
-            cache.add(url).catch(() => {
-              /* 单个失败不阻断安装 */
-            })
+            cache.add(url).catch(() => {})
           )
         )
       )
@@ -62,15 +61,13 @@ function isStaticAsset(url) {
     p.endsWith('.ico') ||
     p.endsWith('.png') ||
     p.endsWith('.svg') ||
-    p.endsWith('.webp') ||
-    p.startsWith('/icons/')
+    p.endsWith('.webp')
   );
 }
 
 async function networkFirst(request) {
   try {
-    const res = await fetch(request);
-    return res;
+    return await fetch(request);
   } catch (err) {
     const cached = await caches.match(request);
     if (cached) return cached;
@@ -81,7 +78,6 @@ async function networkFirst(request) {
 async function staleWhileRevalidate(request) {
   const cache = await caches.open(CACHE_RUNTIME);
   const cached = await cache.match(request);
-
   const fetching = fetch(request)
     .then((res) => {
       if (res && res.status === 200 && (res.type === 'basic' || res.type === 'cors')) {
@@ -90,22 +86,14 @@ async function staleWhileRevalidate(request) {
       return res;
     })
     .catch(() => cached);
-
   return cached || fetching;
 }
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if (request.method !== 'GET') return;
-
   const url = new URL(request.url);
-
-  // API：始终走网络，不缓存
-  if (isSameOrigin(url) && isApiRequest(url)) {
-    return;
-  }
-
-  // 导航导航：网络优先，失败回退缓存首页
+  if (isSameOrigin(url) && isApiRequest(url)) return;
   if (request.mode === 'navigate') {
     event.respondWith(
       networkFirst(request).catch(() =>
@@ -114,8 +102,6 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
-
-  // 静态资源：缓存优先并后台更新
   if (isStaticAsset(url)) {
     event.respondWith(staleWhileRevalidate(request));
   }
