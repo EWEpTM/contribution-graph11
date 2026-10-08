@@ -765,7 +765,7 @@ function onHeatmapClick(params) {
 function openDetailModal() {
     const info = getColor(currentSource);
     const name = escapeHtml(info.name || currentSource);
-    document.getElementById('detailTitle').textContent = '「' + name + '」 ' + detailDate + ' 打卡记录';
+    document.getElementById('detailTitle').textContent = '「' + name + '」 ' + detailDate + ' 记录';
     renderDetailList();
     document.getElementById('detailModal').classList.add('show');
 }
