@@ -148,7 +148,6 @@ func handleContributions(w http.ResponseWriter, r *http.Request) {
     }
 }
 
-// POST: 写入时强制转换为应用时区（Docker TZ）的墙钟时间
 func handlePostContribution(w http.ResponseWriter, r *http.Request) {
     var contributions []Contribution
     if err := json.NewDecoder(r.Body).Decode(&contributions); err != nil {
@@ -202,7 +201,6 @@ func handlePostContribution(w http.ResponseWriter, r *http.Request) {
     fmt.Printf("📥 Received %d events (from %d submitted)\n", count, len(contributions))
 }
 
-// GET: 读出后按应用时区解释
 func handleGetContributions(w http.ResponseWriter, r *http.Request) {
     year := r.URL.Query().Get("year")
     source := r.URL.Query().Get("source")
@@ -308,7 +306,6 @@ func handleGetStats(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(stats)
 }
 
-// 统一处理来源配置的 GET, POST, DELETE
 func handleSources(w http.ResponseWriter, r *http.Request) {
     if r.Method == http.MethodOptions {
         w.WriteHeader(http.StatusOK)
@@ -379,7 +376,6 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
             return
         }
 
-        // 同时删除打卡事件和配置
         resEvents, _ := tx.Exec(`DELETE FROM events WHERE source = ?`, source)
         resConfig, _ := tx.Exec(`DELETE FROM sources_config WHERE id = ?`, source)
 

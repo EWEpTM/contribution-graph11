@@ -257,13 +257,6 @@
     </div>
 
 <script>
-const defaultPresets = [
-    { id: 'git', name: 'Git', emoji: '💻', color: '#238636' },
-    { id: 'github-import', name: 'GitHub', emoji: '🐙', color: '#238636' },
-    { id: 'gitlab-import', name: 'GitLab', emoji: '🦊', color: '#3B82F6' },
-    { id: 'coffee', name: '喝咖啡', emoji: '☕', color: '#8B4513' }
-];
-
 const emojis = ['☕','🏃','📚','🧠','💡','🧘','🎓','💪','🎯','✍️','🎵','🌱','💻','🐙','📱'];
 const colors = [
     '#8B4513','#238636','#f97316','#eab308',
@@ -284,22 +277,10 @@ async function initData() {
         const res = await fetch('/api/sources');
         if (res.ok) {
             const data = await res.json();
-            if (Array.isArray(data) && data.length > 0) {
-                eventsList = data;
-            } else {
-                eventsList = [...defaultPresets];
-                // 首次自动初始化默认配置到数据库
-                for (let p of defaultPresets) {
-                    await fetch('/api/sources', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(p)
-                    });
-                }
-            }
+            eventsList = Array.isArray(data) ? data : [];
         }
     } catch (e) {
-        eventsList = [...defaultPresets];
+        eventsList = [];
     } finally {
         if (btn) btn.style.animation = 'none';
         render();
@@ -406,9 +387,15 @@ async function saveEvent() {
         return;
     }
 
-    if (editingIndex < 0 && !source) {
-        alert('请填写来源 ID');
-        return;
+    if (editingIndex < 0) {
+        if (!source) {
+            alert('请填写来源 ID');
+            return;
+        }
+        if (eventsList.find(e => e.id === source)) {
+            alert('该来源 ID 已存在');
+            return;
+        }
     }
 
     const targetId = editingIndex >= 0 ? eventsList[editingIndex].id : source;
