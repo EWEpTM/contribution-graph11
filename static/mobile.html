@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#0d1117">
-    <title>打卡</title>
+    <title>事件列表</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -62,9 +62,8 @@
             -webkit-tap-highlight-color: transparent;
             position: relative;
         }
-        .btn:active { transform: scale(0.95); opacity: 0.8; }
+        .btn:active { transform: scale(0.98); opacity: 0.9; }
         .btn .emoji { font-size: 2rem; }
-        .editing .btn:active { transform: none; }
         .add-btn {
             background: #21262d;
             border: 2px dashed #30363d;
@@ -240,25 +239,7 @@
             cursor: pointer;
         }
         .btn-delete:active { background: rgba(248,81,73,0.15); }
-        #toast {
-            visibility: hidden;
-            background: #238636;
-            color: #fff;
-            text-align: center;
-            border-radius: 50px;
-            padding: 12px 24px;
-            position: fixed;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-weight: 600;
-            z-index: 100;
-        }
-        #toast.show { visibility: visible; animation: fade 2s; }
-        @keyframes fade {
-            0%, 100% { opacity: 0; }
-            10%, 90% { opacity: 1; }
-        }
+
         @keyframes spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
@@ -277,15 +258,14 @@
 </head>
 <body>
     <div class="header">
-        <h1>事件</h1>
+        <h1>事件列表</h1>
         <div style="display:flex;gap:8px;">
             <button class="edit-btn" id="syncBtn" onclick="initData()" title="刷新">↻</button>
             <button class="edit-btn" id="editBtn" onclick="toggleEdit()">编辑</button>
         </div>
     </div>
     <div class="grid" id="grid"></div>
-    <div class="footer"><a href="/">← 返回仪表盘</a></div>
-    <div id="toast">✅ 已记录！</div>
+    <div class="footer"><a href="/">← 返回主页</a></div>
 
     <!-- 新增 / 编辑弹窗 -->
     <div class="modal" id="modal">
@@ -362,7 +342,7 @@ function render() {
     const grid = document.getElementById('grid');
     grid.innerHTML = eventsList.map((e, i) => `
         <button class="btn" style="background:linear-gradient(135deg,${e.color},${adjustColor(e.color,-20)})"
-            onclick="${isEditing ? `openEdit(${i})` : `log('${e.id}')`}">
+            onclick="openEdit(${i})">
             <span class="emoji">${e.emoji || '📱'}</span>
             ${e.name}
         </button>
@@ -376,7 +356,6 @@ function render() {
             </button>
         `;
     }
-    document.body.classList.toggle('editing', isEditing);
 }
 
 function adjustColor(hex, percent) {
@@ -559,29 +538,6 @@ async function confirmDelete() {
     } catch (e) {
         alert('删除失败');
     }
-}
-
-function log(source) {
-    if (isEditing) return;
-    if (navigator.vibrate) navigator.vibrate(50);
-    fetch('/api/contributions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify([{
-            source,
-            context: 'manual',
-            timestamp: new Date().toISOString(),
-            metadata: { device: 'mobile', manual: true }
-        }])
-    }).then(r => {
-        if (r.ok) toast();
-    }).catch(() => alert('连接失败'));
-}
-
-function toast() {
-    const t = document.getElementById('toast');
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 2000);
 }
 
 initData();

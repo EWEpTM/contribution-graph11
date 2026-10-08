@@ -16,6 +16,7 @@
             --muted: #8b949e;
             --border: #30363d;
             --green: #238636;
+            --green-hover: #2ea043;
             --blue: #3b82f6;
             --orange: #f97316;
         }
@@ -154,23 +155,24 @@
             width: 8px; height: 8px; border-radius: 50%;
         }
 
-        /* 记录按钮样式 */
+        /* 常驻记录按钮 */
         .record-btn {
             background: var(--green);
             color: #fff;
             border: none;
-            padding: 0.25rem 0.75rem;
+            padding: 0.3rem 0.85rem;
             border-radius: 16px;
-            font-size: 0.8rem;
+            font-size: 0.85rem;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
             display: inline-flex;
             align-items: center;
             gap: 0.3rem;
+            box-shadow: 0 2px 6px rgba(35,134,54,0.3);
         }
         .record-btn:hover {
-            opacity: 0.9;
+            background: var(--green-hover);
             transform: translateY(-1px);
         }
         .record-btn:active {
@@ -235,6 +237,150 @@
         }
         footer a:hover { color: var(--text); }
 
+        /* ========== 内置模态框样式 ========== */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.75);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            backdrop-filter: blur(4px);
+        }
+        .modal-overlay.show {
+            display: flex;
+        }
+        .custom-modal {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+            width: 100%;
+            max-width: 480px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            animation: modalFadeIn 0.2s ease-out;
+        }
+        @keyframes modalFadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+        .modal-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+        .modal-close {
+            background: transparent;
+            border: none;
+            color: var(--muted);
+            font-size: 1.3rem;
+            cursor: pointer;
+            padding: 0 4px;
+        }
+        .modal-close:hover { color: var(--text); }
+
+        /* 两排滑动网格 */
+        .event-scroll-wrap {
+            display: grid;
+            grid-template-rows: repeat(2, minmax(50px, auto));
+            grid-auto-flow: column;
+            grid-auto-columns: minmax(130px, max-content);
+            gap: 10px;
+            overflow-x: auto;
+            padding: 8px 2px;
+            cursor: grab;
+            user-select: none;
+            -webkit-overflow-scrolling: touch;
+        }
+        .event-scroll-wrap:active { cursor: grabbing; }
+        .event-scroll-wrap::-webkit-scrollbar { height: 6px; }
+        .event-scroll-wrap::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+        .event-scroll-wrap::-webkit-scrollbar-track { background: var(--bg); }
+
+        .event-card {
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        .event-card:hover {
+            border-color: #58a6ff;
+            transform: translateY(-2px);
+        }
+        .event-card:active { transform: scale(0.96); }
+        .event-card .emoji { font-size: 1.3rem; }
+        .event-card .name {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--text);
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 16px;
+        }
+        .btn-modal {
+            padding: 8px 18px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+        }
+        .btn-modal-cancel {
+            background: var(--bg3);
+            color: var(--muted);
+            border: 1px solid var(--border);
+        }
+        .btn-modal-cancel:hover { background: var(--border); color: var(--text); }
+        .btn-modal-confirm {
+            background: var(--green);
+            color: #fff;
+        }
+        .btn-modal-confirm:hover { background: var(--green-hover); }
+
+        /* 内置 Toast 消息 */
+        #toast {
+            visibility: hidden;
+            opacity: 0;
+            background: var(--green);
+            color: #fff;
+            padding: 10px 24px;
+            border-radius: 30px;
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2000;
+            font-size: 0.9rem;
+            font-weight: 600;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+        #toast.show {
+            visibility: visible;
+            opacity: 1;
+        }
+
         @media (max-width: 640px) {
             body { padding: 0.75rem 0.5rem 1.5rem; }
             h1 { font-size: 1.35rem; margin-bottom: 1rem; }
@@ -283,8 +429,8 @@
                     <span class="dot" id="badgeDot"></span>
                     <span id="badgeName">全部</span>
                 </span>
-                <!-- 仅在选择特定事件时显示的记录按钮 -->
-                <button class="record-btn" id="recordBtn" style="display:none;" onclick="logCurrentEvent()">+ 记录</button>
+                <!-- 常驻记录按钮 -->
+                <button class="record-btn" id="recordBtn" onclick="handleRecordClick()">+ 记录</button>
             </div>
             <div style="display:flex;gap:0.5rem;align-items:center;">
                 <select id="combineMode" style="display:none;" title="合并方式">
@@ -305,6 +451,34 @@
         <a href="/mobile.html">事件</a>
     </footer>
 </div>
+
+<!-- 自定义弹窗 1：选择事件弹窗 (两排左右滑动/拖拽) -->
+<div class="modal-overlay" id="selectModal">
+    <div class="custom-modal">
+        <div class="modal-header">
+            <div class="modal-title">选择要记录的事件</div>
+            <button class="modal-close" onclick="closeSelectModal()">×</button>
+        </div>
+        <div class="event-scroll-wrap" id="eventScrollContainer"></div>
+    </div>
+</div>
+
+<!-- 自定义弹窗 2：二次确认框 -->
+<div class="modal-overlay" id="confirmModal">
+    <div class="custom-modal" style="max-width: 360px;">
+        <div class="modal-title" style="margin-bottom:10px;">确认打卡</div>
+        <p style="color:var(--muted);font-size:0.95rem;margin-bottom:20px;">
+            确定要为「<strong id="targetEventName" style="color:var(--text)"></strong>」记录一次打卡吗？
+        </p>
+        <div class="modal-actions">
+            <button class="btn-modal btn-modal-cancel" onclick="closeConfirmModal()">取消</button>
+            <button class="btn-modal btn-modal-confirm" onclick="submitLog()">确定</button>
+        </div>
+    </div>
+</div>
+
+<!-- 自定义内置 Toast 提示框 -->
+<div id="toast">✅ 记录成功！</div>
 
 <script>
 const DEFAULT_PRESETS = {
@@ -333,6 +507,7 @@ async function loadSourceColorsFromDB() {
                         rgb: hexToRgb(e.color),
                         hex: e.color || '#8b949e',
                         name: e.name || e.id,
+                        emoji: e.emoji || '📱',
                         is_low_freq: !!e.is_low_freq
                     };
                 });
@@ -356,6 +531,7 @@ function getColor(id) {
             rgb: hexToRgb(hex),
             hex: hex,
             name: id,
+            emoji: '📱',
             is_low_freq: false
         };
     }
@@ -366,6 +542,7 @@ function getColor(id) {
 let year = parseInt(localStorage.getItem('dashboard_year')) || new Date().getFullYear();
 let currentSource = localStorage.getItem('dashboard_source') || 'combined';
 let combineMode = localStorage.getItem('dashboard_combine_mode') || 'winner';
+let pendingTargetSource = null;
 let allData = [];
 let statsData = {};
 let chart = null;
@@ -393,6 +570,8 @@ async function init() {
         localStorage.setItem('dashboard_combine_mode', combineMode);
         renderHeatmap();
     };
+
+    initMouseDragScroll();
 
     await loadStats();
     await loadData();
@@ -424,35 +603,115 @@ async function loadData() {
     }
 }
 
-/* ========== 记录事件 ========== */
-async function logCurrentEvent() {
-    if (currentSource === 'combined') return;
-    const info = getColor(currentSource);
-    const eventName = info.name || currentSource;
-
-    if (confirm(`确定要为「${eventName}」记录一次吗？`)) {
-        try {
-            const res = await fetch('/api/contributions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify([{
-                    source: currentSource,
-                    context: 'manual',
-                    timestamp: new Date().toISOString(),
-                    metadata: { device: 'web', manual: true }
-                }])
-            });
-            if (res.ok) {
-                await loadStats();
-                await loadData();
-                render();
-            } else {
-                alert('记录失败，请重试');
-            }
-        } catch (e) {
-            alert('网络连接失败');
-        }
+/* ========== 点击记录处理按钮 ========== */
+function handleRecordClick() {
+    if (currentSource === 'combined') {
+        openSelectEventModal();
+    } else {
+        promptConfirmLog(currentSource);
     }
+}
+
+function openSelectEventModal() {
+    const container = document.getElementById('eventScrollContainer');
+    let html = '';
+
+    const keys = Object.keys(sourceColors).filter(k => k !== 'default');
+    
+    if (keys.length === 0) {
+        container.innerHTML = '<div style="color:var(--muted);padding:10px;">暂无可用事件，请先在事件页面配置。</div>';
+    } else {
+        keys.forEach(id => {
+            const info = getColor(id);
+            html += `
+                <div class="event-card" onclick="promptConfirmLog('${id}')">
+                    <span class="emoji">${info.emoji || '📱'}</span>
+                    <span class="name">${info.name}</span>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+    }
+
+    document.getElementById('selectModal').classList.add('show');
+}
+
+function closeSelectModal() {
+    document.getElementById('selectModal').classList.remove('show');
+}
+
+function promptConfirmLog(sourceId) {
+    pendingTargetSource = sourceId;
+    const info = getColor(sourceId);
+    document.getElementById('targetEventName').textContent = info.name || sourceId;
+    
+    closeSelectModal();
+    document.getElementById('confirmModal').classList.add('show');
+}
+
+function closeConfirmModal() {
+    document.getElementById('confirmModal').classList.remove('show');
+    pendingTargetSource = null;
+}
+
+async function submitLog() {
+    if (!pendingTargetSource) return;
+    const target = pendingTargetSource;
+    closeConfirmModal();
+
+    try {
+        const res = await fetch('/api/contributions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify([{
+                source: target,
+                context: 'manual',
+                timestamp: new Date().toISOString(),
+                metadata: { device: 'web', manual: true }
+            }])
+        });
+
+        if (res.ok) {
+            showToast('✅ 记录成功！');
+            await loadStats();
+            await loadData();
+            render();
+        } else {
+            showToast('❌ 记录失败，请重试');
+        }
+    } catch (e) {
+        showToast('❌ 网络请求失败');
+    }
+}
+
+function showToast(msg) {
+    const toast = document.getElementById('toast');
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 2000);
+}
+
+function initMouseDragScroll() {
+    const el = document.getElementById('eventScrollContainer');
+    let isDown = false;
+    let startX, scrollLeft;
+
+    el.addEventListener('mousedown', (e) => {
+        isDown = true;
+        startX = e.pageX - el.offsetLeft;
+        scrollLeft = el.scrollLeft;
+    });
+    el.addEventListener('mouseleave', () => { isDown = false; });
+    el.addEventListener('mouseup', () => { isDown = false; });
+    el.addEventListener('mousemove', (e) => {
+        if (!isDown) return;
+        e.preventDefault();
+        const x = e.pageX - el.offsetLeft;
+        const walk = (x - startX) * 1.5;
+        el.scrollLeft = scrollLeft - walk;
+    });
 }
 
 /* ========== 渲染 ========== */
@@ -463,6 +722,7 @@ function render() {
 }
 
 function renderTabs() {
+    // 恢复原有逻辑：仅统计在当前年份有数据记录的事件
     const bySource = {};
     allData.forEach(c => {
         bySource[c.source] = (bySource[c.source] || 0) + 1;
@@ -539,14 +799,8 @@ function renderStats() {
 function renderHeatmap() {
     const isCombined = currentSource === 'combined';
     
-    // 控制合并模式与记录按钮的显示/隐藏
     const modeSel = document.getElementById('combineMode');
     modeSel.style.display = isCombined ? '' : 'none';
-
-    const recordBtn = document.getElementById('recordBtn');
-    if (recordBtn) {
-        recordBtn.style.display = isCombined ? 'none' : 'inline-flex';
-    }
 
     const c = isCombined
         ? { hex: 'linear-gradient(135deg,#238636,#3b82f6)', name: '全部' }
