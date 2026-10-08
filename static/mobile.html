@@ -54,26 +54,53 @@
         .btn {
             border: none;
             border-radius: 16px;
-            padding: 24px 16px;
-            font-size: 1rem;
+            padding: 20px 12px;
+            font-size: 0.95rem;
             font-weight: 600;
             color: #fff;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 6px;
             cursor: pointer;
             transition: transform 0.1s, opacity 0.2s;
             -webkit-tap-highlight-color: transparent;
             position: relative;
+            min-height: 110px;
         }
         .btn:active { transform: scale(0.98); opacity: 0.9; }
-        .btn .emoji { font-size: 2rem; }
+        .btn .emoji { font-size: 2rem; line-height: 1; }
+        .btn .name {
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            padding: 0 4px;
+        }
+        .btn .low-tag {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            font-size: 0.65rem;
+            background: rgba(0,0,0,0.35);
+            padding: 2px 6px;
+            border-radius: 8px;
+            font-weight: 500;
+            color: #e6edf3;
+        }
         .add-btn {
             background: #21262d;
             border: 2px dashed #30363d;
             color: #8b949e;
+        }
+        .empty-tip {
+            grid-column: 1 / -1;
+            text-align: center;
+            color: #8b949e;
+            padding: 48px 16px;
+            font-size: 0.95rem;
+            line-height: 1.6;
         }
         .modal {
             display: none;
@@ -117,22 +144,28 @@
             outline: none;
             border-color: #238636;
         }
+        .modal input[type="text"]:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
         .modal label {
             display: block;
             color: #8b949e;
             font-size: 0.85rem;
             margin-bottom: 6px;
         }
-
-        .custom-emoji-row {
-            margin-bottom: 14px;
+        .hint {
+            font-size: 0.75rem;
+            color: #6e7681;
+            margin: -8px 0 14px;
+            line-height: 1.4;
         }
+        .custom-emoji-row { margin-bottom: 14px; }
         .custom-emoji-row input[type="text"] {
             margin-bottom: 0;
             text-align: center;
             font-size: 1.5rem;
         }
-
         .color-picker {
             display: grid;
             grid-template-columns: repeat(6, 1fr);
@@ -147,7 +180,6 @@
             border: 2px solid transparent;
         }
         .color-option.selected { border-color: #fff; }
-
         .custom-color-row {
             display: flex;
             align-items: center;
@@ -166,10 +198,9 @@
         .custom-color-row input[type="text"] {
             flex: 1;
             margin-bottom: 0;
-            font-family: monospace, monospace;
+            font-family: ui-monospace, monospace;
             text-transform: uppercase;
         }
-
         .checkbox-row {
             display: flex;
             align-items: center;
@@ -180,21 +211,21 @@
             border-radius: 8px;
             margin-bottom: 16px;
             cursor: pointer;
+            user-select: none;
         }
         .checkbox-row input[type="checkbox"] {
             width: 18px;
             height: 18px;
             accent-color: #238636;
             cursor: pointer;
+            flex-shrink: 0;
         }
-        .checkbox-row label {
+        .checkbox-row .cb-label {
             margin-bottom: 0;
             color: #e6edf3;
             font-size: 0.9rem;
             cursor: pointer;
-            user-select: none;
         }
-
         .modal-buttons {
             display: flex;
             gap: 12px;
@@ -208,6 +239,10 @@
             font-size: 1rem;
             font-weight: 600;
             cursor: pointer;
+        }
+        .modal-buttons button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
         .btn-cancel { background: #21262d; color: #8b949e; }
         .btn-save { background: #238636; color: #fff; }
@@ -224,12 +259,12 @@
             cursor: pointer;
         }
         .btn-delete:active { background: rgba(248,81,73,0.15); }
+        .btn-delete:disabled { opacity: 0.6; cursor: not-allowed; }
         .btn-danger-confirm {
             background: #da3633;
             color: #fff;
         }
         .btn-danger-confirm:hover { background: #b82a28; }
-
         @keyframes spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
@@ -244,6 +279,29 @@
             text-decoration: none;
             font-size: 0.9rem;
         }
+        #toast {
+            visibility: hidden;
+            opacity: 0;
+            background: #238636;
+            color: #fff;
+            padding: 10px 24px;
+            border-radius: 30px;
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 3000;
+            font-size: 0.9rem;
+            font-weight: 600;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+            transition: opacity 0.25s, visibility 0.25s;
+            pointer-events: none;
+        }
+        #toast.show {
+            visibility: visible;
+            opacity: 1;
+        }
+        #toast.error { background: #da3633; }
     </style>
 </head>
 <body>
@@ -256,6 +314,7 @@
     </div>
     <div class="grid" id="grid"></div>
     <div class="footer"><a href="/">← 返回主页</a></div>
+    <div id="toast"></div>
 
     <!-- 新增 / 编辑弹窗 -->
     <div class="modal" id="modal">
@@ -263,23 +322,27 @@
             <h2 id="modalTitle">添加事件类型</h2>
 
             <label>名称</label>
-            <input type="text" id="eventName" placeholder="例如：跑步">
+            <input type="text" id="eventName" placeholder="例如：跑步" autocomplete="off">
 
-            <label>图标 (输入或粘贴 Emoji)</label>
+            <label>来源 ID</label>
+            <input type="text" id="eventSourceId" placeholder="例如：running" autocomplete="off">
+            <div class="hint" id="sourceIdHint">用于 API / Agent 识别，建议英文小写，创建后不可修改</div>
+
+            <label>图标（输入或粘贴 Emoji）</label>
             <div class="custom-emoji-row">
-                <input type="text" id="customEmojiInput" placeholder="输入 Emoji，如 ☕" oninput="onCustomEmojiInputChange(this.value)">
+                <input type="text" id="customEmojiInput" placeholder="例如 🏃" oninput="onCustomEmojiInputChange(this.value)">
             </div>
 
-            <label>颜色 (预设 / HEX自选)</label>
+            <label>颜色（预设 / HEX）</label>
             <div class="color-picker" id="colorPicker"></div>
             <div class="custom-color-row">
                 <input type="color" id="hexColorPicker" oninput="onCustomColorPickerChange(this.value)">
                 <input type="text" id="hexColorInput" placeholder="#238636" maxlength="7" oninput="onCustomHexInputChange(this.value)">
             </div>
 
-            <div class="checkbox-row" onclick="document.getElementById('isLowFreq').click()">
-                <input type="checkbox" id="isLowFreq" onclick="event.stopPropagation()">
-                <label for="isLowFreq">低频事件（1次打卡即达到高亮）</label>
+            <div class="checkbox-row" id="lowFreqRow">
+                <input type="checkbox" id="isLowFreq">
+                <span class="cb-label">低频事件（1 次打卡即较亮）</span>
             </div>
 
             <div class="modal-buttons">
@@ -301,16 +364,16 @@
             </p>
             <div class="modal-buttons">
                 <button class="btn-cancel" onclick="closeDeleteConfirmModal()">取消</button>
-                <button class="btn-danger-confirm" onclick="executeDelete()">确认删除</button>
+                <button class="btn-danger-confirm" id="confirmDeleteBtn" onclick="executeDelete()">确认删除</button>
             </div>
         </div>
     </div>
 
 <script>
 const colors = [
-    '#8B4513','#238636','#f97316','#eab308',
-    '#3b82f6','#a855f7','#ec4899','#ef4444',
-    '#14b8a6','#6366f1','#84cc16','#f59e0b'
+    '#8B4513', '#238636', '#f97316', '#eab308',
+    '#3b82f6', '#a855f7', '#ec4899', '#ef4444',
+    '#14b8a6', '#6366f1', '#84cc16', '#f59e0b'
 ];
 
 let eventsList = [];
@@ -318,6 +381,7 @@ let isEditing = false;
 let selectedEmoji = '📱';
 let selectedColor = colors[0];
 let editingIndex = -1;
+let saving = false;
 
 async function initData() {
     const btn = document.getElementById('syncBtn');
@@ -331,31 +395,58 @@ async function initData() {
         if (res.ok) {
             const data = await res.json();
             eventsList = Array.isArray(data) ? data : [];
+        } else {
+            eventsList = [];
+            showToast('加载失败', true);
         }
     } catch (e) {
         eventsList = [];
+        showToast('网络错误，无法加载', true);
     } finally {
         if (btn) btn.style.animation = 'none';
         render();
     }
 }
 
-function getNextAvailableSourceId() {
-    const existingIds = new Set(eventsList.map(e => parseInt(e.id)).filter(n => !isNaN(n) && n > 0));
-    let id = 1;
-    while (existingIds.has(id)) {
-        id++;
-    }
-    return String(id);
+function slugify(name) {
+    let s = (name || '').trim().toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9\u4e00-\u9fff\-_]/g, '')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+    if (!s) s = 'event';
+    // 若全是中文等，给一个可读前缀，避免空或纯符号
+    if (!/[a-z0-9]/.test(s)) s = 'event-' + Date.now().toString(36).slice(-4);
+    return s.slice(0, 48);
+}
+
+function ensureUniqueId(base) {
+    const existing = new Set(eventsList.map(e => e.id));
+    if (!existing.has(base)) return base;
+    let i = 2;
+    while (existing.has(base + '-' + i)) i++;
+    return base + '-' + i;
 }
 
 function render() {
     const grid = document.getElementById('grid');
+
+    if (!eventsList.length && !isEditing) {
+        grid.innerHTML = `
+            <div class="empty-tip">
+                暂无事件类型<br>
+                点击右上角「编辑」后新增
+            </div>
+        `;
+        return;
+    }
+
     grid.innerHTML = eventsList.map((e, i) => `
-        <button class="btn" style="background:linear-gradient(135deg,${e.color},${adjustColor(e.color,-20)})"
+        <button class="btn" style="background:linear-gradient(135deg,${e.color || '#8b949e'},${adjustColor(e.color || '#8b949e', -20)})"
             onclick="openEdit(${i})">
+            ${e.is_low_freq ? '<span class="low-tag">低频</span>' : ''}
             <span class="emoji">${e.emoji || '📱'}</span>
-            ${e.name}
+            <span class="name">${escapeHtml(e.name || e.id)}</span>
         </button>
     `).join('');
 
@@ -363,15 +454,24 @@ function render() {
         grid.innerHTML += `
             <button class="btn add-btn" onclick="openAdd()">
                 <span class="emoji">+</span>
-                新增
+                <span class="name">新增</span>
             </button>
         `;
     }
 }
 
+function escapeHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
 function adjustColor(hex, percent) {
     if (!hex || !hex.startsWith('#')) return '#8b949e';
     const num = parseInt(hex.slice(1), 16);
+    if (isNaN(num)) return '#8b949e';
     const r = Math.min(255, Math.max(0, (num >> 16) + percent));
     const g = Math.min(255, Math.max(0, ((num >> 8) & 0x00FF) + percent));
     const b = Math.min(255, Math.max(0, (num & 0x0000FF) + percent));
@@ -392,11 +492,15 @@ function openAdd() {
     document.getElementById('saveBtn').textContent = '添加';
     document.getElementById('deleteBtn').style.display = 'none';
     document.getElementById('eventName').value = '';
+    document.getElementById('eventSourceId').value = '';
+    document.getElementById('eventSourceId').disabled = false;
+    document.getElementById('sourceIdHint').textContent = '用于 API / Agent 识别，建议英文小写；可留空自动生成';
     document.getElementById('isLowFreq').checked = false;
-    
+
     updateEmojiState('📱');
     updateColorState(colors[0]);
     document.getElementById('modal').classList.add('show');
+    setTimeout(() => document.getElementById('eventName').focus(), 50);
 }
 
 function openEdit(index) {
@@ -408,8 +512,11 @@ function openEdit(index) {
     document.getElementById('saveBtn').textContent = '保存';
     document.getElementById('deleteBtn').style.display = 'block';
     document.getElementById('eventName').value = e.name || '';
+    document.getElementById('eventSourceId').value = e.id || '';
+    document.getElementById('eventSourceId').disabled = true;
+    document.getElementById('sourceIdHint').textContent = '来源 ID 创建后不可修改（与历史数据绑定）';
     document.getElementById('isLowFreq').checked = !!e.is_low_freq;
-    
+
     updateEmojiState(e.emoji || '📱');
     updateColorState(e.color || colors[0]);
     document.getElementById('modal').classList.add('show');
@@ -423,7 +530,7 @@ function closeModal() {
 function updateEmojiState(emojiStr) {
     selectedEmoji = emojiStr || '📱';
     const input = document.getElementById('customEmojiInput');
-    if (input) input.value = emojiStr;
+    if (input) input.value = selectedEmoji;
 }
 
 function onCustomEmojiInputChange(val) {
@@ -431,7 +538,7 @@ function onCustomEmojiInputChange(val) {
 }
 
 function renderColorPicker() {
-    const cur = selectedColor.toLowerCase();
+    const cur = (selectedColor || '').toLowerCase();
     document.getElementById('colorPicker').innerHTML = colors.map(c =>
         `<div class="color-option ${c.toLowerCase() === cur ? 'selected' : ''}" style="background:${c}" onclick="selectColor('${c}')"></div>`
     ).join('');
@@ -441,7 +548,6 @@ function updateColorState(hex) {
     selectedColor = hex;
     const picker = document.getElementById('hexColorPicker');
     const input = document.getElementById('hexColorInput');
-    
     if (input) input.value = hex;
     if (picker && /^#[0-9A-Fa-f]{6}$/.test(hex)) {
         picker.value = hex;
@@ -457,9 +563,7 @@ function onCustomColorPickerChange(val) {
 
 function onCustomHexInputChange(val) {
     let hex = val.trim();
-    if (hex && !hex.startsWith('#')) {
-        hex = '#' + hex;
-    }
+    if (hex && !hex.startsWith('#')) hex = '#' + hex;
     selectedColor = hex;
     const picker = document.getElementById('hexColorPicker');
     if (picker && /^#[0-9A-Fa-f]{6}$/.test(hex)) {
@@ -468,29 +572,65 @@ function onCustomHexInputChange(val) {
     renderColorPicker();
 }
 
+// 名称失焦时，若 ID 为空则自动填 slug
+document.getElementById('eventName').addEventListener('blur', () => {
+    if (editingIndex >= 0) return;
+    const idInput = document.getElementById('eventSourceId');
+    if (idInput.value.trim()) return;
+    const name = document.getElementById('eventName').value.trim();
+    if (name) idInput.value = ensureUniqueId(slugify(name));
+});
+
+// 低频行点击切换（避免和 checkbox 双触发）
+document.getElementById('lowFreqRow').addEventListener('click', (e) => {
+    if (e.target.id === 'isLowFreq') return;
+    const cb = document.getElementById('isLowFreq');
+    cb.checked = !cb.checked;
+});
+
 async function saveEvent() {
+    if (saving) return;
+
     const name = document.getElementById('eventName').value.trim();
     const isLowFreq = document.getElementById('isLowFreq').checked;
+    let sourceId = document.getElementById('eventSourceId').value.trim().toLowerCase().replace(/\s+/g, '-');
 
     if (!name) {
-        alert('请填写名称');
+        showToast('请填写名称', true);
+        document.getElementById('eventName').focus();
         return;
+    }
+
+    if (editingIndex < 0) {
+        if (!sourceId) sourceId = ensureUniqueId(slugify(name));
+        if (!/^[a-z0-9][a-z0-9_\-]*$/i.test(sourceId) && !/^[\w\u4e00-\u9fff\-]+$/.test(sourceId)) {
+            showToast('来源 ID 格式不合法', true);
+            return;
+        }
+        // 新建时若与已有冲突，自动加后缀
+        sourceId = ensureUniqueId(sourceId);
+    } else {
+        sourceId = eventsList[editingIndex].id;
     }
 
     if (!/^#[0-9A-Fa-f]{6}$/.test(selectedColor)) {
-        alert('请输入有效的 6 位 HEX 颜色值（例如：#238636）');
+        showToast('请输入有效的 6 位 HEX 颜色', true);
         return;
     }
 
-    const targetId = editingIndex >= 0 ? eventsList[editingIndex].id : getNextAvailableSourceId();
-    
     const payload = {
-        id: targetId,
+        id: sourceId,
         name: name,
-        emoji: selectedEmoji,
+        emoji: selectedEmoji || '📱',
         color: selectedColor,
         is_low_freq: isLowFreq
     };
+
+    saving = true;
+    const saveBtn = document.getElementById('saveBtn');
+    const oldText = saveBtn.textContent;
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
 
     try {
         const res = await fetch('/api/sources', {
@@ -502,11 +642,19 @@ async function saveEvent() {
             window.location.href = '/login.html';
             return;
         }
-        if (!res.ok) throw new Error('保存失败');
+        if (!res.ok) {
+            const err = await res.text().catch(() => '');
+            throw new Error(err || '保存失败');
+        }
+        showToast(editingIndex >= 0 ? '已保存' : '已添加');
         await initData();
         closeModal();
     } catch (e) {
-        alert('保存配置到服务器失败');
+        showToast('保存失败，请重试', true);
+    } finally {
+        saving = false;
+        saveBtn.disabled = false;
+        saveBtn.textContent = oldText;
     }
 }
 
@@ -514,8 +662,7 @@ function openDeleteConfirmModal() {
     if (editingIndex < 0) return;
     const target = eventsList[editingIndex];
     if (!target) return;
-
-    document.getElementById('deleteTargetName').textContent = target.name;
+    document.getElementById('deleteTargetName').textContent = target.name || target.id;
     document.getElementById('deleteModal').classList.add('show');
 }
 
@@ -524,24 +671,55 @@ function closeDeleteConfirmModal() {
 }
 
 async function executeDelete() {
-    if (editingIndex < 0) return;
+    if (editingIndex < 0 || saving) return;
     const target = eventsList[editingIndex];
     if (!target) return;
 
+    saving = true;
+    const btn = document.getElementById('confirmDeleteBtn');
+    btn.disabled = true;
+    btn.textContent = '删除中…';
+
     try {
-        const res = await fetch(`/api/sources?source=${encodeURIComponent(target.id)}`, { method: 'DELETE' });
+        const res = await fetch(`/api/sources?source=${encodeURIComponent(target.id)}`, {
+            method: 'DELETE'
+        });
         if (res.status === 401) {
             window.location.href = '/login.html';
             return;
         }
         if (!res.ok) throw new Error('删除失败');
+        showToast('已删除');
         closeDeleteConfirmModal();
         closeModal();
         await initData();
     } catch (e) {
-        alert('删除失败');
+        showToast('删除失败', true);
+    } finally {
+        saving = false;
+        btn.disabled = false;
+        btn.textContent = '确认删除';
     }
 }
+
+function showToast(msg, isError) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.toggle('error', !!isError);
+    t.classList.add('show');
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// Esc 关闭弹窗
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('deleteModal').classList.contains('show')) {
+        closeDeleteConfirmModal();
+    } else if (document.getElementById('modal').classList.contains('show')) {
+        closeModal();
+    }
+});
 
 initData();
 </script>
