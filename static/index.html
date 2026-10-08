@@ -4,7 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#0d1117">
+    <meta name="description" content="个人活动打卡与热力图">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Keep">
+    <meta name="mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
     <title>Keep</title>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
     <style>
@@ -24,10 +31,7 @@
             --page-pad-y: clamp(0.6rem, 1.5vw, 2.5rem);
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        html {
-            height: 100%;
-            -webkit-text-size-adjust: 100%;
-        }
+        html { height: 100%; -webkit-text-size-adjust: 100%; }
         body {
             background: var(--bg);
             color: var(--text);
@@ -38,7 +42,6 @@
             display: flex;
             flex-direction: column;
         }
-
         .container {
             max-width: 1320px;
             margin: 0 auto;
@@ -48,7 +51,6 @@
             flex-direction: column;
             gap: clamp(0.65rem, 1.5vw, 1.25rem);
         }
-
         h1 {
             text-align: center;
             font-size: clamp(1.25rem, 2.5vw + 0.6rem, 2.2rem);
@@ -60,8 +62,6 @@
             -webkit-text-fill-color: transparent;
             flex-shrink: 0;
         }
-
-        /* 来源 Tab */
         .source-tabs {
             display: flex;
             flex-wrap: wrap;
@@ -93,11 +93,7 @@
             color: var(--text);
             border-color: var(--border);
         }
-        .source-tab .dot {
-            width: 8px; height: 8px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
+        .source-tab .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
         .source-tab .count {
             background: var(--bg);
             padding: 0.1rem 0.4rem;
@@ -106,8 +102,6 @@
             color: var(--muted);
         }
         .source-tab.active .count { color: var(--text); }
-
-        /* 统计卡片 */
         .stats {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -120,7 +114,6 @@
             border-radius: 12px;
             padding: clamp(0.65rem, 1.5vw, 1.3rem) clamp(0.4rem, 1vw, 1rem);
             text-align: center;
-            transition: all 0.2s;
             min-width: 0;
         }
         .stat-val {
@@ -135,8 +128,6 @@
             letter-spacing: 0.06em;
             margin-top: 0.2rem;
         }
-
-        /* 热力图卡片：占满剩余空间 */
         .graph-card {
             background: var(--bg2);
             border: 1px solid var(--border);
@@ -176,10 +167,7 @@
             font-size: 0.8em;
             font-weight: 500;
         }
-        .graph-title .badge .dot {
-            width: 8px; height: 8px; border-radius: 50%;
-        }
-
+        .graph-title .badge .dot { width: 8px; height: 8px; border-radius: 50%; }
         .record-btn {
             background: var(--green);
             color: #fff;
@@ -189,20 +177,13 @@
             font-size: clamp(0.8rem, 1.5vw, 0.95rem);
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
             display: inline-flex;
             align-items: center;
             gap: 0.3rem;
             box-shadow: 0 2px 6px rgba(35,134,54,0.3);
         }
-        .record-btn:hover {
-            background: var(--green-hover);
-            transform: translateY(-1px);
-        }
-        .record-btn:active {
-            transform: scale(0.95);
-        }
-
+        .record-btn:hover { background: var(--green-hover); transform: translateY(-1px); }
+        .record-btn:active { transform: scale(0.95); }
         select {
             background: var(--bg3);
             color: var(--text);
@@ -213,7 +194,6 @@
             cursor: pointer;
         }
         select:focus { outline: none; border-color: var(--green); }
-
         .heatmap-wrap {
             position: relative;
             z-index: 1;
@@ -233,7 +213,6 @@
             -webkit-transform: translateZ(0);
             transform: translateZ(0);
         }
-
         .legend {
             display: flex;
             justify-content: center;
@@ -244,16 +223,8 @@
             flex-wrap: wrap;
             flex-shrink: 0;
         }
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 0.28rem;
-        }
-        .legend-box {
-            width: 11px; height: 11px;
-            border-radius: 2px;
-        }
-
+        .legend-item { display: flex; align-items: center; gap: 0.28rem; }
+        .legend-box { width: 11px; height: 11px; border-radius: 2px; }
         footer {
             text-align: center;
             font-size: clamp(0.8rem, 1.4vw, 0.9rem);
@@ -261,13 +232,8 @@
             flex-shrink: 0;
             padding-top: 0.15rem;
         }
-        footer a {
-            color: #58a6ff;
-            text-decoration: none;
-        }
+        footer a { color: #58a6ff; text-decoration: none; }
         footer a:hover { color: var(--text); }
-
-        /* 弹窗样式 */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -279,9 +245,7 @@
             padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
             backdrop-filter: blur(4px);
         }
-        .modal-overlay.show {
-            display: flex;
-        }
+        .modal-overlay.show { display: flex; }
         .custom-modal {
             background: var(--bg2);
             border: 1px solid var(--border);
@@ -304,11 +268,7 @@
             align-items: center;
             margin-bottom: 14px;
         }
-        .modal-title {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: var(--text);
-        }
+        .modal-title { font-size: 1.1rem; font-weight: 600; color: var(--text); }
         .modal-close {
             background: transparent;
             border: none;
@@ -318,7 +278,6 @@
             padding: 0 4px;
         }
         .modal-close:hover { color: var(--text); }
-
         .event-scroll-wrap {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -330,13 +289,6 @@
             user-select: none;
             -webkit-overflow-scrolling: touch;
         }
-        .event-scroll-wrap::-webkit-scrollbar { width: 6px; }
-        .event-scroll-wrap::-webkit-scrollbar-thumb {
-            background: var(--border);
-            border-radius: 3px;
-        }
-        .event-scroll-wrap::-webkit-scrollbar-track { background: var(--bg); }
-
         .event-card {
             background: var(--bg3);
             border: 1px solid var(--border);
@@ -348,19 +300,12 @@
             justify-content: center;
             gap: 6px;
             cursor: pointer;
-            transition: all 0.15s;
             aspect-ratio: 1 / 1;
             text-align: center;
         }
-        .event-card:hover {
-            border-color: #58a6ff;
-            transform: translateY(-2px);
-        }
+        .event-card:hover { border-color: #58a6ff; transform: translateY(-2px); }
         .event-card:active { transform: scale(0.95); }
-        .event-card .emoji {
-            font-size: clamp(1.25rem, 3vw, 1.6rem);
-            line-height: 1;
-        }
+        .event-card .emoji { font-size: clamp(1.25rem, 3vw, 1.6rem); line-height: 1; }
         .event-card .name {
             font-size: clamp(0.7rem, 1.8vw, 0.8rem);
             font-weight: 500;
@@ -371,7 +316,6 @@
             text-overflow: ellipsis;
             padding: 0 2px;
         }
-
         .modal-actions {
             display: flex;
             gap: 10px;
@@ -391,13 +335,7 @@
             color: var(--muted);
             border: 1px solid var(--border);
         }
-        .btn-modal-cancel:hover { background: var(--border); color: var(--text); }
-        .btn-modal-confirm {
-            background: var(--green);
-            color: #fff;
-        }
-        .btn-modal-confirm:hover { background: var(--green-hover); }
-
+        .btn-modal-confirm { background: var(--green); color: #fff; }
         #toast {
             visibility: hidden;
             opacity: 0;
@@ -417,23 +355,10 @@
             max-width: 90vw;
             text-align: center;
         }
-        #toast.show {
-            visibility: visible;
-            opacity: 1;
-        }
-
-        /* 窄屏：统计 2 列 */
+        #toast.show { visibility: visible; opacity: 1; }
         @media (max-width: 640px) {
             .stats { grid-template-columns: repeat(2, 1fr); }
         }
-
-        /* 极窄屏 */
-        @media (max-width: 380px) {
-            .source-tab { font-size: 0.72rem; padding: 0.25rem 0.45rem; }
-            .graph-title { font-size: 0.9rem; }
-        }
-
-        /* 横屏手机：压缩纵向占用 */
         @media (max-height: 500px) and (orientation: landscape) {
             .container { gap: 0.4rem; }
             .stats { grid-template-columns: repeat(4, 1fr); }
@@ -446,9 +371,7 @@
 <body>
 <div class="container">
     <h1>Keep 热力图</h1>
-
     <div class="source-tabs" id="sourceTabs"></div>
-
     <div class="stats">
         <div class="stat">
             <div class="stat-val" id="statTotal">0</div>
@@ -467,7 +390,6 @@
             <div class="stat-lbl">事件类</div>
         </div>
     </div>
-
     <div class="graph-card">
         <div class="graph-header">
             <div class="graph-title">
@@ -492,7 +414,6 @@
         </div>
         <div class="legend" id="legend"></div>
     </div>
-
     <footer>
         <a href="/manage.html">⚙️ 事件类型配置</a>
     </footer>
@@ -527,7 +448,6 @@
 const DEFAULT_PRESETS = {
     'default': { rgb: '139,148,158', hex: '#8b949e', name: '其他', is_low_freq: false }
 };
-
 let sourceColors = { ...DEFAULT_PRESETS };
 
 function hexToRgb(hex) {
@@ -597,7 +517,6 @@ function isIOSDevice() {
 
 async function init() {
     await loadSourceColorsFromDB();
-
     const yearSel = document.getElementById('year');
     const cy = new Date().getFullYear();
     yearSel.innerHTML = '';
@@ -610,7 +529,6 @@ async function init() {
         await loadData();
         render();
     };
-
     const modeSel = document.getElementById('combineMode');
     modeSel.value = combineMode;
     modeSel.onchange = () => {
@@ -618,11 +536,9 @@ async function init() {
         localStorage.setItem('dashboard_combine_mode', combineMode);
         renderHeatmap();
     };
-
     await loadStats();
     await loadData();
     render();
-
     setInterval(async () => {
         await loadSourceColorsFromDB();
         await loadStats();
@@ -652,34 +568,26 @@ async function loadData() {
 }
 
 function handleRecordClick() {
-    if (currentSource === 'combined') {
-        openSelectEventModal();
-    } else {
-        promptConfirmLog(currentSource);
-    }
+    if (currentSource === 'combined') openSelectEventModal();
+    else promptConfirmLog(currentSource);
 }
 
 function openSelectEventModal() {
     const container = document.getElementById('eventScrollContainer');
-    let html = '';
-
     const keys = Object.keys(sourceColors).filter(k => k !== 'default');
-    
     if (keys.length === 0) {
         container.innerHTML = '<div style="color:var(--muted);padding:20px;grid-column:span 3;text-align:center;">暂无可用事件，请先在事件配置页面添加。</div>';
     } else {
+        let html = '';
         keys.forEach(id => {
             const info = getColor(id);
-            html += `
-                <div class="event-card" onclick="promptConfirmLog('${id}')">
-                    <span class="emoji">${info.emoji || '📱'}</span>
-                    <span class="name">${info.name}</span>
-                </div>
-            `;
+            html += `<div class="event-card" onclick="promptConfirmLog('${id}')">
+                <span class="emoji">${info.emoji || '📱'}</span>
+                <span class="name">${info.name}</span>
+            </div>`;
         });
         container.innerHTML = html;
     }
-
     document.getElementById('selectModal').classList.add('show');
 }
 
@@ -691,7 +599,6 @@ function promptConfirmLog(sourceId) {
     pendingTargetSource = sourceId;
     const info = getColor(sourceId);
     document.getElementById('targetEventName').textContent = info.name || sourceId;
-    
     closeSelectModal();
     document.getElementById('confirmModal').classList.add('show');
 }
@@ -705,7 +612,6 @@ async function submitLog() {
     if (!pendingTargetSource) return;
     const target = pendingTargetSource;
     closeConfirmModal();
-
     try {
         const res = await fetch('/api/contributions', {
             method: 'POST',
@@ -717,17 +623,13 @@ async function submitLog() {
                 metadata: { device: 'web', manual: true }
             }])
         });
-
         if (res.status === 401) { window.location.href = '/login.html'; return; }
-
         if (res.ok) {
             showToast('✅ 记录成功！');
             await loadStats();
             await loadData();
             render();
-        } else {
-            showToast('❌ 记录失败，请重试');
-        }
+        } else showToast('❌ 记录失败，请重试');
     } catch (e) {
         showToast('❌ 网络请求失败');
     }
@@ -737,9 +639,7 @@ function showToast(msg) {
     const toast = document.getElementById('toast');
     toast.textContent = msg;
     toast.classList.add('show');
-    setTimeout(() => {
-        toast.classList.remove('show');
-    }, 2000);
+    setTimeout(() => toast.classList.remove('show'), 2000);
 }
 
 function render() {
@@ -750,30 +650,18 @@ function render() {
 
 function renderTabs() {
     const bySource = {};
-    allData.forEach(c => {
-        bySource[c.source] = (bySource[c.source] || 0) + 1;
-    });
-
+    allData.forEach(c => { bySource[c.source] = (bySource[c.source] || 0) + 1; });
     if (currentSource !== 'combined' && !bySource[currentSource]) {
         currentSource = 'combined';
         localStorage.setItem('dashboard_source', 'combined');
     }
-
     const tabs = document.getElementById('sourceTabs');
-    let html = '';
-
-    const total = allData.length;
-    html += tabHtml('combined', '全部', total, 'linear-gradient(135deg,#238636,#3b82f6)');
-
-    Object.entries(bySource)
-        .sort((a, b) => b[1] - a[1])
-        .forEach(([id, cnt]) => {
-            const c = getColor(id);
-            html += tabHtml(id, c.name, cnt, c.hex);
-        });
-
+    let html = tabHtml('combined', '全部', allData.length, 'linear-gradient(135deg,#238636,#3b82f6)');
+    Object.entries(bySource).sort((a, b) => b[1] - a[1]).forEach(([id, cnt]) => {
+        const c = getColor(id);
+        html += tabHtml(id, c.name, cnt, c.hex);
+    });
     tabs.innerHTML = html;
-
     tabs.querySelectorAll('.source-tab').forEach(el => {
         el.onclick = () => {
             currentSource = el.dataset.id;
@@ -787,37 +675,27 @@ function tabHtml(id, name, count, color) {
     const active = currentSource === id ? 'active' : '';
     return `<button class="source-tab ${active}" data-id="${id}">
         <span class="dot" style="background:${color}"></span>
-        ${name}
-        <span class="count">${count}</span>
+        ${name}<span class="count">${count}</span>
     </button>`;
 }
 
 function renderStats() {
     const bySource = statsData.by_source || {};
-
     const now = new Date();
     const todayStr = statsData.today_date || [
         now.getFullYear(),
         String(now.getMonth() + 1).padStart(2, '0'),
         String(now.getDate()).padStart(2, '0')
     ].join('-');
-
     let total, today;
     if (currentSource === 'combined') {
         total = allData.length;
-        today = allData.filter(c => {
-            const dt = c.local_date || (c.timestamp || '').slice(0, 10);
-            return dt === todayStr;
-        }).length;
+        today = allData.filter(c => (c.local_date || (c.timestamp || '').slice(0, 10)) === todayStr).length;
     } else {
         const filtered = allData.filter(c => c.source === currentSource);
         total = filtered.length;
-        today = filtered.filter(c => {
-            const dt = c.local_date || (c.timestamp || '').slice(0, 10);
-            return dt === todayStr;
-        }).length;
+        today = filtered.filter(c => (c.local_date || (c.timestamp || '').slice(0, 10)) === todayStr).length;
     }
-
     document.getElementById('statTotal').textContent = total;
     document.getElementById('statToday').textContent = today;
     document.getElementById('statStreak').textContent = statsData.current_streak || 0;
@@ -826,10 +704,7 @@ function renderStats() {
 
 function renderHeatmap() {
     const isCombined = currentSource === 'combined';
-
-    const modeSel = document.getElementById('combineMode');
-    modeSel.style.display = isCombined ? '' : 'none';
-
+    document.getElementById('combineMode').style.display = isCombined ? '' : 'none';
     const c = isCombined
         ? { hex: 'linear-gradient(135deg,#238636,#3b82f6)', name: '全部' }
         : getColor(currentSource);
@@ -838,7 +713,6 @@ function renderHeatmap() {
     document.getElementById('badgeName').textContent = c.name || currentSource;
 
     const data = isCombined ? allData : allData.filter(x => x.source === currentSource);
-
     const days = {};
     data.forEach(item => {
         const dt = item.local_date || (item.timestamp || '').split('T')[0];
@@ -850,26 +724,17 @@ function renderHeatmap() {
 
     const chartData = Object.entries(days).map(([date, stats]) => {
         let color;
-        if (isCombined) {
-            color = getCombinedColor(stats);
-        } else {
+        if (isCombined) color = getCombinedColor(stats);
+        else {
             const sc = getColor(currentSource);
-            let opacity;
-            if (sc.is_low_freq) {
-                opacity = Math.min(1, 0.65 + (stats.total - 1) * 0.12);
-            } else {
-                opacity = Math.min(1, Math.max(0.3, stats.total / 10));
-            }
+            let opacity = sc.is_low_freq
+                ? Math.min(1, 0.65 + (stats.total - 1) * 0.12)
+                : Math.min(1, Math.max(0.3, stats.total / 10));
             color = `rgba(${sc.rgb},${opacity})`;
         }
         return {
             value: [date, stats.total],
-            itemStyle: {
-                color,
-                borderColor: '#0d1117',
-                borderWidth: 1,
-                borderRadius: 2
-            }
+            itemStyle: { color, borderColor: '#0d1117', borderWidth: 1, borderRadius: 2 }
         };
     });
 
@@ -884,8 +749,8 @@ function renderHeatmap() {
 
     const el = document.getElementById('heatmap');
     const wrap = el.parentElement;
-    const vw = window.innerWidth || document.documentElement.clientWidth || 800;
-    const vh = window.innerHeight || document.documentElement.clientHeight || 600;
+    const vw = window.innerWidth || 800;
+    const vh = window.innerHeight || 600;
     const isNarrow = vw < 640;
     const isTablet = vw >= 640 && vw < 1024;
 
@@ -893,45 +758,29 @@ function renderHeatmap() {
     let avail = wrap.clientWidth || vw;
     if (avail < 80) avail = vw - 24;
 
-    // 边距随屏幕缩放，保证热力图尽量一屏完整显示
     const leftPad = isNarrow ? 18 : (isTablet ? 28 : 42);
     const rightPad = isNarrow ? 4 : (isTablet ? 12 : 20);
-
-    // 按容器宽度算格子；窄屏允许略小，宽屏有上限避免过大留白
     let cell = Math.floor((avail - leftPad - rightPad) / 53);
-    if (isNarrow) {
-        cell = Math.max(7, Math.min(14, cell));
-    } else if (isTablet) {
-        cell = Math.max(10, Math.min(18, cell));
-    } else {
-        cell = Math.max(12, Math.min(22, cell));
-    }
+    if (isNarrow) cell = Math.max(7, Math.min(14, cell));
+    else if (isTablet) cell = Math.max(10, Math.min(18, cell));
+    else cell = Math.max(12, Math.min(22, cell));
 
-    // 根据视口高度限制图表高度，避免页脚被挤出需要滚动
-    const headerBlock = document.querySelector('.graph-header');
-    const legendEl = document.getElementById('legend');
     const usedOutside =
         (document.querySelector('h1')?.offsetHeight || 40) +
         (document.getElementById('sourceTabs')?.offsetHeight || 48) +
         (document.querySelector('.stats')?.offsetHeight || 80) +
-        (headerBlock?.offsetHeight || 40) +
-        (legendEl?.offsetHeight || 28) +
-        (document.querySelector('footer')?.offsetHeight || 28) +
-        80; // 内外边距余量
+        (document.querySelector('.graph-header')?.offsetHeight || 40) +
+        (document.getElementById('legend')?.offsetHeight || 28) +
+        (document.querySelector('footer')?.offsetHeight || 28) + 80;
 
     const maxGraphH = Math.max(110, Math.min(vh - usedOutside, isNarrow ? 160 : (isTablet ? 200 : 240)));
     let graphH = Math.round(cell * 7 + (isNarrow ? 36 : 48));
     if (graphH > maxGraphH) {
-        // 高度不够时优先压高度，必要时再略缩小 cell
         graphH = maxGraphH;
         const cellByH = Math.floor((graphH - (isNarrow ? 36 : 48)) / 7);
-        if (cellByH > 0 && cellByH < cell) {
-            cell = Math.max(isNarrow ? 7 : 10, cellByH);
-        }
+        if (cellByH > 0 && cellByH < cell) cell = Math.max(isNarrow ? 7 : 10, cellByH);
     }
-
     const graphW = 53 * cell + leftPad + rightPad;
-
     el.style.width = graphW + 'px';
     el.style.height = graphH + 'px';
 
@@ -940,20 +789,13 @@ function renderHeatmap() {
             try { chart.dispose(); } catch (_) {}
             chart = null;
         }
-
         if (!chart) {
-            chart = echarts.init(el, 'dark', {
-                width: graphW,
-                height: graphH,
-                renderer: 'canvas'
-            });
+            chart = echarts.init(el, 'dark', { width: graphW, height: graphH, renderer: 'canvas' });
         } else {
             chart.resize({ width: graphW, height: graphH });
         }
-
         const labelSize = Math.max(9, Math.min(13, Math.floor(cell * 0.7)));
         const monthSize = Math.max(10, Math.min(13, Math.floor(cell * 0.75)));
-
         chart.setOption({
             backgroundColor: 'transparent',
             animation: false,
@@ -962,9 +804,7 @@ function renderHeatmap() {
                 confine: false,
                 extraCssText: 'z-index: 9999; pointer-events: none;',
                 position: function (point, params, dom, rect, size) {
-                    const x = point[0];
-                    const y = point[1] - size.contentSize[1] - 12;
-                    return [x, Math.max(8, y)];
+                    return [point[0], Math.max(8, point[1] - size.contentSize[1] - 12)];
                 },
                 formatter: p => {
                     if (!p.data || !p.data.value) return '';
@@ -974,12 +814,10 @@ function renderHeatmap() {
                     let tip = `<b>${date}</b><br/>${count} 次`;
                     if (isCombined && dayStats) {
                         tip += '<br/>';
-                        Object.entries(dayStats.src)
-                            .sort((a, b) => b[1] - a[1])
-                            .forEach(([src, cnt]) => {
-                                const info = getColor(src);
-                                tip += `<br/><span style="color:${info.hex}">●</span> ${info.name}：${cnt}`;
-                            });
+                        Object.entries(dayStats.src).sort((a, b) => b[1] - a[1]).forEach(([src, cnt]) => {
+                            const info = getColor(src);
+                            tip += `<br/><span style="color:${info.hex}">●</span> ${info.name}：${cnt}`;
+                        });
                     }
                     return tip;
                 }
@@ -994,30 +832,18 @@ function renderHeatmap() {
                 splitLine: { show: false },
                 yearLabel: { show: false },
                 dayLabel: {
-                    color: '#8b949e',
-                    firstDay: 1,
+                    color: '#8b949e', firstDay: 1,
                     nameMap: ['7', '1', '2', '3', '4', '5', '6'],
                     fontSize: labelSize
                 },
-                monthLabel: {
-                    color: '#8b949e',
-                    fontSize: monthSize
-                }
+                monthLabel: { color: '#8b949e', fontSize: monthSize }
             },
-            series: {
-                type: 'heatmap',
-                coordinateSystem: 'calendar',
-                data: chartData
-            }
+            series: { type: 'heatmap', coordinateSystem: 'calendar', data: chartData }
         }, true);
-
         requestAnimationFrame(() => {
-            if (chart && !chart.isDisposed()) {
-                chart.resize({ width: graphW, height: graphH });
-            }
+            if (chart && !chart.isDisposed()) chart.resize({ width: graphW, height: graphH });
         });
     };
-
     requestAnimationFrame(draw);
 }
 
@@ -1027,12 +853,9 @@ function getCombinedColor(stats) {
         let winner = 'default', max = 0;
         sources.forEach(([src, cnt]) => { if (cnt > max) { max = cnt; winner = src; } });
         const sc = getColor(winner);
-        let opacity;
-        if (sc.is_low_freq) {
-            opacity = Math.min(1, 0.65 + (stats.total - 1) * 0.12);
-        } else {
-            opacity = Math.min(1, Math.max(0.3, stats.total / 12));
-        }
+        const opacity = sc.is_low_freq
+            ? Math.min(1, 0.65 + (stats.total - 1) * 0.12)
+            : Math.min(1, Math.max(0.3, stats.total / 12));
         return `rgba(${sc.rgb},${opacity})`;
     }
     if (combineMode === 'blend') {
@@ -1042,25 +865,24 @@ function getCombinedColor(stats) {
             const w = cnt / stats.total;
             r += rgb[0] * w; g += rgb[1] * w; b += rgb[2] * w;
         });
-        const opacity = Math.min(1, Math.max(0.3, stats.total / 12));
-        return `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${opacity})`;
+        return `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${Math.min(1, Math.max(0.3, stats.total / 12))})`;
     }
-    const sc = { rgb: '35,134,54', hex: '#238636' };
-    const opacity = Math.min(1, Math.max(0.3, stats.total / 18));
-    return `rgba(${sc.rgb},${opacity})`;
+    return `rgba(35,134,54,${Math.min(1, Math.max(0.3, stats.total / 18))})`;
 }
 
 window.addEventListener('resize', () => {
     clearTimeout(window.__rz);
-    window.__rz = setTimeout(() => {
-        if (allData) renderHeatmap();
-    }, 200);
+    window.__rz = setTimeout(() => { if (allData) renderHeatmap(); }, 200);
 });
-
-// 方向变化时重新布局
 window.addEventListener('orientationchange', () => {
     setTimeout(() => { if (allData) renderHeatmap(); }, 300);
 });
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
+}
 
 init();
 </script>

@@ -3,15 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#0d1117">
+    <meta name="description" content="Keep 事件类型配置">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Keep">
+    <meta name="mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
     <title>事件配置</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        html {
-            height: 100%;
-            -webkit-text-size-adjust: 100%;
-        }
+        html { height: 100%; -webkit-text-size-adjust: 100%; }
         body {
             background: #0d1117;
             color: #fff;
@@ -33,10 +37,7 @@
             flex-shrink: 0;
             gap: 8px;
         }
-        h1 {
-            font-size: clamp(1.1rem, 2.5vw, 1.4rem);
-            color: #e6edf3;
-        }
+        h1 { font-size: clamp(1.1rem, 2.5vw, 1.4rem); color: #e6edf3; }
         .edit-btn {
             background: #21262d;
             border: 1px solid #30363d;
@@ -46,11 +47,7 @@
             font-size: clamp(0.8rem, 1.5vw, 0.9rem);
             cursor: pointer;
         }
-        .edit-btn.active {
-            background: #238636;
-            border-color: #238636;
-            color: #fff;
-        }
+        .edit-btn.active { background: #238636; border-color: #238636; color: #fff; }
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
@@ -59,15 +56,9 @@
             align-content: start;
             min-height: 0;
         }
-        @media (min-width: 480px) {
-            .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
-        }
-        @media (min-width: 768px) {
-            .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
-        }
-        @media (min-width: 1024px) {
-            .grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
-        }
+        @media (min-width: 480px) { .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); } }
+        @media (min-width: 768px) { .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); } }
+        @media (min-width: 1024px) { .grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); } }
         .btn {
             border: none;
             border-radius: 16px;
@@ -81,18 +72,12 @@
             justify-content: center;
             gap: 8px;
             cursor: pointer;
-            transition: transform 0.1s, opacity 0.2s;
             -webkit-tap-highlight-color: transparent;
-            position: relative;
             min-height: clamp(100px, 18vw, 140px);
         }
         .btn:active { transform: scale(0.98); opacity: 0.9; }
         .btn .emoji { font-size: clamp(1.6rem, 4vw, 2.2rem); }
-        .add-btn {
-            background: #21262d;
-            border: 2px dashed #30363d;
-            color: #8b949e;
-        }
+        .add-btn { background: #21262d; border: 2px dashed #30363d; color: #8b949e; }
         .modal {
             display: none;
             position: fixed;
@@ -116,11 +101,7 @@
             overflow-y: auto;
             box-shadow: 0 10px 30px rgba(0,0,0,0.6);
         }
-        .modal h2 {
-            font-size: clamp(1rem, 2.2vw, 1.15rem);
-            margin-bottom: 16px;
-            color: #e6edf3;
-        }
+        .modal h2 { font-size: clamp(1rem, 2.2vw, 1.15rem); margin-bottom: 16px; color: #e6edf3; }
         .modal input[type="text"] {
             width: 100%;
             padding: 12px;
@@ -131,141 +112,45 @@
             font-size: 1rem;
             margin-bottom: 14px;
         }
-        .modal input[type="text"]:focus {
-            outline: none;
-            border-color: #238636;
-        }
-        .modal label {
-            display: block;
-            color: #8b949e;
-            font-size: 0.85rem;
-            margin-bottom: 6px;
-        }
-
-        .custom-emoji-row {
-            margin-bottom: 14px;
-        }
-        .custom-emoji-row input[type="text"] {
-            margin-bottom: 0;
-            text-align: center;
-            font-size: 1.5rem;
-        }
-
-        .color-picker {
-            display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-        .color-option {
-            width: 100%;
-            aspect-ratio: 1;
-            border-radius: 8px;
-            cursor: pointer;
-            border: 2px solid transparent;
-        }
+        .modal input[type="text"]:focus { outline: none; border-color: #238636; }
+        .modal label { display: block; color: #8b949e; font-size: 0.85rem; margin-bottom: 6px; }
+        .custom-emoji-row { margin-bottom: 14px; }
+        .custom-emoji-row input[type="text"] { margin-bottom: 0; text-align: center; font-size: 1.5rem; }
+        .color-picker { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 10px; }
+        .color-option { width: 100%; aspect-ratio: 1; border-radius: 8px; cursor: pointer; border: 2px solid transparent; }
         .color-option.selected { border-color: #fff; }
-
-        .custom-color-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 16px;
-        }
+        .custom-color-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
         .custom-color-row input[type="color"] {
-            width: 44px;
-            height: 44px;
-            border: 1px solid #30363d;
-            border-radius: 8px;
-            background: #0d1117;
-            cursor: pointer;
-            padding: 2px;
-            flex-shrink: 0;
+            width: 44px; height: 44px; border: 1px solid #30363d; border-radius: 8px;
+            background: #0d1117; cursor: pointer; padding: 2px; flex-shrink: 0;
         }
         .custom-color-row input[type="text"] {
-            flex: 1;
-            margin-bottom: 0;
-            font-family: monospace, monospace;
-            text-transform: uppercase;
-            min-width: 0;
+            flex: 1; margin-bottom: 0; font-family: monospace, monospace;
+            text-transform: uppercase; min-width: 0;
         }
-
         .checkbox-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            padding: 10px 12px;
-            border-radius: 8px;
-            margin-bottom: 16px;
-            cursor: pointer;
+            display: flex; align-items: center; gap: 10px; background: #0d1117;
+            border: 1px solid #30363d; padding: 10px 12px; border-radius: 8px;
+            margin-bottom: 16px; cursor: pointer;
         }
-        .checkbox-row input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            accent-color: #238636;
-            cursor: pointer;
-            flex-shrink: 0;
-        }
-        .checkbox-row label {
-            margin-bottom: 0;
-            color: #e6edf3;
-            font-size: 0.9rem;
-            cursor: pointer;
-            user-select: none;
-        }
-
-        .modal-buttons {
-            display: flex;
-            gap: 12px;
-            margin-top: 4px;
-        }
+        .checkbox-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: #238636; flex-shrink: 0; }
+        .checkbox-row label { margin-bottom: 0; color: #e6edf3; font-size: 0.9rem; cursor: pointer; user-select: none; }
+        .modal-buttons { display: flex; gap: 12px; margin-top: 4px; }
         .modal-buttons button {
-            flex: 1;
-            padding: 12px;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
+            flex: 1; padding: 12px; border: none; border-radius: 8px;
+            font-size: 1rem; font-weight: 600; cursor: pointer;
         }
         .btn-cancel { background: #21262d; color: #8b949e; }
         .btn-save { background: #238636; color: #fff; }
         .btn-delete {
-            width: 100%;
-            margin-top: 16px;
-            padding: 12px;
-            border: 1px solid #f85149;
-            border-radius: 8px;
-            background: transparent;
-            color: #f85149;
-            font-size: 0.95rem;
-            font-weight: 600;
-            cursor: pointer;
+            width: 100%; margin-top: 16px; padding: 12px;
+            border: 1px solid #f85149; border-radius: 8px;
+            background: transparent; color: #f85149; font-size: 0.95rem; font-weight: 600; cursor: pointer;
         }
-        .btn-delete:active { background: rgba(248,81,73,0.15); }
-        .btn-danger-confirm {
-            background: #da3633;
-            color: #fff;
-        }
-        .btn-danger-confirm:hover { background: #b82a28; }
-
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-        .footer {
-            text-align: center;
-            margin-top: clamp(0.75rem, 2vw, 1.25rem);
-            padding: 8px 0;
-            flex-shrink: 0;
-        }
-        .footer a {
-            color: #58a6ff;
-            text-decoration: none;
-            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
-        }
+        .btn-danger-confirm { background: #da3633; color: #fff; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .footer { text-align: center; margin-top: clamp(0.75rem, 2vw, 1.25rem); padding: 8px 0; flex-shrink: 0; }
+        .footer a { color: #58a6ff; text-decoration: none; font-size: clamp(0.85rem, 1.5vw, 0.95rem); }
     </style>
 </head>
 <body>
@@ -282,32 +167,26 @@
     <div class="modal" id="modal">
         <div class="modal-content">
             <h2 id="modalTitle">添加事件类型</h2>
-
             <label>名称</label>
             <input type="text" id="eventName" placeholder="例如：跑步">
-
             <label>图标 (输入或粘贴 Emoji)</label>
             <div class="custom-emoji-row">
                 <input type="text" id="customEmojiInput" placeholder="输入 Emoji，如 ☕" oninput="onCustomEmojiInputChange(this.value)">
             </div>
-
             <label>颜色 (预设 / HEX自选)</label>
             <div class="color-picker" id="colorPicker"></div>
             <div class="custom-color-row">
                 <input type="color" id="hexColorPicker" oninput="onCustomColorPickerChange(this.value)">
                 <input type="text" id="hexColorInput" placeholder="#238636" maxlength="7" oninput="onCustomHexInputChange(this.value)">
             </div>
-
             <div class="checkbox-row" onclick="document.getElementById('isLowFreq').click()">
                 <input type="checkbox" id="isLowFreq" onclick="event.stopPropagation()">
                 <label for="isLowFreq">低频事件（1次打卡即达到高亮）</label>
             </div>
-
             <div class="modal-buttons">
                 <button class="btn-cancel" onclick="closeModal()">取消</button>
                 <button class="btn-save" id="saveBtn" onclick="saveEvent()">添加</button>
             </div>
-
             <button class="btn-delete" id="deleteBtn" style="display:none;" onclick="openDeleteConfirmModal()">彻底删除此事件类型</button>
         </div>
     </div>
@@ -332,7 +211,6 @@ const colors = [
     '#3b82f6','#a855f7','#ec4899','#ef4444',
     '#14b8a6','#6366f1','#84cc16','#f59e0b'
 ];
-
 let eventsList = [];
 let isEditing = false;
 let selectedEmoji = '📱';
@@ -344,10 +222,7 @@ async function initData() {
     if (btn) btn.style.animation = 'spin 1s linear infinite';
     try {
         const res = await fetch('/api/sources');
-        if (res.status === 401) {
-            window.location.href = '/login.html';
-            return;
-        }
+        if (res.status === 401) { window.location.href = '/login.html'; return; }
         if (res.ok) {
             const data = await res.json();
             eventsList = Array.isArray(data) ? data : [];
@@ -373,14 +248,8 @@ function render() {
             ${e.name}
         </button>
     `).join('');
-
     if (isEditing) {
-        grid.innerHTML += `
-            <button class="btn add-btn" onclick="openAdd()">
-                <span class="emoji">+</span>
-                新增
-            </button>
-        `;
+        grid.innerHTML += `<button class="btn add-btn" onclick="openAdd()"><span class="emoji">+</span>新增</button>`;
     }
 }
 
@@ -408,7 +277,6 @@ function openAdd() {
     document.getElementById('deleteBtn').style.display = 'none';
     document.getElementById('eventName').value = '';
     document.getElementById('isLowFreq').checked = false;
-    
     updateEmojiState('📱');
     updateColorState(colors[0]);
     document.getElementById('modal').classList.add('show');
@@ -418,13 +286,11 @@ function openEdit(index) {
     editingIndex = index;
     const e = eventsList[index];
     if (!e) return;
-
     document.getElementById('modalTitle').textContent = '修改事件类型';
     document.getElementById('saveBtn').textContent = '保存';
     document.getElementById('deleteBtn').style.display = 'block';
     document.getElementById('eventName').value = e.name || '';
     document.getElementById('isLowFreq').checked = !!e.is_low_freq;
-    
     updateEmojiState(e.emoji || '📱');
     updateColorState(e.color || colors[0]);
     document.getElementById('modal').classList.add('show');
@@ -441,9 +307,7 @@ function updateEmojiState(emojiStr) {
     if (input) input.value = emojiStr;
 }
 
-function onCustomEmojiInputChange(val) {
-    selectedEmoji = val.trim() || '📱';
-}
+function onCustomEmojiInputChange(val) { selectedEmoji = val.trim() || '📱'; }
 
 function renderColorPicker() {
     const cur = selectedColor.toLowerCase();
@@ -456,67 +320,40 @@ function updateColorState(hex) {
     selectedColor = hex;
     const picker = document.getElementById('hexColorPicker');
     const input = document.getElementById('hexColorInput');
-    
     if (input) input.value = hex;
-    if (picker && /^#[0-9A-Fa-f]{6}$/.test(hex)) {
-        picker.value = hex;
-    }
+    if (picker && /^#[0-9A-Fa-f]{6}$/.test(hex)) picker.value = hex;
     renderColorPicker();
 }
 
 function selectColor(c) { updateColorState(c); }
-
-function onCustomColorPickerChange(val) {
-    updateColorState(val);
-}
+function onCustomColorPickerChange(val) { updateColorState(val); }
 
 function onCustomHexInputChange(val) {
     let hex = val.trim();
-    if (hex && !hex.startsWith('#')) {
-        hex = '#' + hex;
-    }
+    if (hex && !hex.startsWith('#')) hex = '#' + hex;
     selectedColor = hex;
     const picker = document.getElementById('hexColorPicker');
-    if (picker && /^#[0-9A-Fa-f]{6}$/.test(hex)) {
-        picker.value = hex;
-    }
+    if (picker && /^#[0-9A-Fa-f]{6}$/.test(hex)) picker.value = hex;
     renderColorPicker();
 }
 
 async function saveEvent() {
     const name = document.getElementById('eventName').value.trim();
     const isLowFreq = document.getElementById('isLowFreq').checked;
-
-    if (!name) {
-        alert('请填写名称');
-        return;
-    }
-
+    if (!name) { alert('请填写名称'); return; }
     if (!/^#[0-9A-Fa-f]{6}$/.test(selectedColor)) {
         alert('请输入有效的 6 位 HEX 颜色值（例如：#238636）');
         return;
     }
-
     const targetId = editingIndex >= 0 ? eventsList[editingIndex].id : generateUniqueSourceId();
-    
-    const payload = {
-        id: targetId,
-        name: name,
-        emoji: selectedEmoji,
-        color: selectedColor,
-        is_low_freq: isLowFreq
-    };
-
+    const payload = { id: targetId, name, emoji: selectedEmoji, color: selectedColor, is_low_freq: isLowFreq };
     try {
         const res = await fetch('/api/sources', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
-        if (res.status === 401) {
-            window.location.href = '/login.html';
-            return;
-        }
+        if (res.status === 401) { window.location.href = '/login.html'; return; }
         if (!res.ok) throw new Error('保存失败');
         await initData();
         closeModal();
@@ -529,7 +366,6 @@ function openDeleteConfirmModal() {
     if (editingIndex < 0) return;
     const target = eventsList[editingIndex];
     if (!target) return;
-
     document.getElementById('deleteTargetName').textContent = target.name;
     document.getElementById('deleteModal').classList.add('show');
 }
@@ -542,13 +378,9 @@ async function executeDelete() {
     if (editingIndex < 0) return;
     const target = eventsList[editingIndex];
     if (!target) return;
-
     try {
         const res = await fetch(`/api/sources?source=${encodeURIComponent(target.id)}`, { method: 'DELETE' });
-        if (res.status === 401) {
-            window.location.href = '/login.html';
-            return;
-        }
+        if (res.status === 401) { window.location.href = '/login.html'; return; }
         if (!res.ok) throw new Error('删除失败');
         closeDeleteConfirmModal();
         closeModal();
@@ -556,6 +388,12 @@ async function executeDelete() {
     } catch (e) {
         alert('删除失败');
     }
+}
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
 }
 
 initData();
