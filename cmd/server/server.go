@@ -1,36 +1,36 @@
 package main
 
 import (
-	"crypto/sha256"
-	"database/sql"
-	"encoding/hex"
-	"encoding/json"
-	"fmt"
-	"log"
-	"net/http"
-	"os"
-	"strconv"
-	"strings"
-	"time"
+    "crypto/sha256"
+    "database/sql"
+    "encoding/hex"
+    "encoding/json"
+    "fmt"
+    "log"
+    "net/http"
+    "os"
+    "strconv"
+    "strings"
+    "time"
 
-	_ "modernc.org/sqlite"
+    _ "modernc.org/sqlite"
 )
 
 // Contribution represents the unified event structure
 type Contribution struct {
-	Source    string          `json:"source"`
-	Context   string          `json:"context"`
-	Timestamp time.Time       `json:"timestamp"`
-	MetaData  json.RawMessage `json:"metadata"`
-	LocalDate string          `json:"local_date,omitempty"`
+    Source    string          `json:"source"`
+    Context   string          `json:"context"`
+    Timestamp time.Time       `json:"timestamp"`
+    MetaData  json.RawMessage `json:"metadata"`
+    LocalDate string          `json:"local_date,omitempty"`
 }
 
 type EventSourceConfig struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Emoji     string `json:"emoji"`
-	Color     string `json:"color"`
-	IsLowFreq bool   `json:"is_low_freq"`
+    ID        string `json:"id"`
+    Name      string `json:"name"`
+    Emoji     string `json:"emoji"`
+    Color     string `json:"color"`
+    IsLowFreq bool   `json:"is_low_freq"`
 }
 
 var db *sql.DB
@@ -42,66 +42,66 @@ var authPassword string
 var expectedToken string
 
 func initLocation() {
-	tz := os.Getenv("TZ")
-	if tz == "" {
-		tz = "Asia/Shanghai"
-	}
-	loc, err := time.LoadLocation(tz)
-	if err != nil {
-		log.Printf("⚠️  Invalid TZ %q, fallback to Asia/Shanghai: %v", tz, err)
-		loc, err = time.LoadLocation("Asia/Shanghai")
-		if err != nil {
-			log.Fatalf("Failed to load timezone: %v", err)
-		}
-	}
-	appLocation = loc
-	log.Printf("🌏 Using timezone: %s", appLocation.String())
+    tz := os.Getenv("TZ")
+    if tz == "" {
+        tz = "Asia/Shanghai"
+    }
+    loc, err := time.LoadLocation(tz)
+    if err != nil {
+        log.Printf("⚠️  Invalid TZ %q, fallback to Asia/Shanghai: %v", tz, err)
+        loc, err = time.LoadLocation("Asia/Shanghai")
+        if err != nil {
+            log.Fatalf("Failed to load timezone: %v", err)
+        }
+    }
+    appLocation = loc
+    log.Printf("🌏 Using timezone: %s", appLocation.String())
 }
 
 func initAuth() {
-	authUsername = os.Getenv("AUTH_USERNAME")
-	if authUsername == "" {
-		authUsername = "admin"
-	}
-	authPassword = os.Getenv("AUTH_PASSWORD")
-	if authPassword != "" {
-		h := sha256.Sum256([]byte("keep_salt_" + authPassword + "_" + authUsername))
-		expectedToken = hex.EncodeToString(h[:])
-		log.Printf("🔒 Auth enabled for user: %s", authUsername)
-	} else {
-		log.Printf("🔓 Auth disabled (AUTH_PASSWORD not set)")
-	}
+    authUsername = os.Getenv("AUTH_USERNAME")
+    if authUsername == "" {
+        authUsername = "admin"
+    }
+    authPassword = os.Getenv("AUTH_PASSWORD")
+    if authPassword != "" {
+        h := sha256.Sum256([]byte("keep_salt_" + authPassword + "_" + authUsername))
+        expectedToken = hex.EncodeToString(h[:])
+        log.Printf("🔒 Auth enabled for user: %s", authUsername)
+    } else {
+        log.Printf("🔓 Auth disabled (AUTH_PASSWORD not set)")
+    }
 }
 
 func main() {
-	initLocation()
-	initAuth()
+    initLocation()
+    initAuth()
 
-	dbPath := os.Getenv("DB_PATH")
-	if dbPath == "" {
-		dbPath = "./data/contributions.db"
-	}
+    dbPath := os.Getenv("DB_PATH")
+    if dbPath == "" {
+        dbPath = "./data/contributions.db"
+    }
 
-	if err := os.MkdirAll("./data", 0755); err != nil {
-		log.Fatalf("Failed to create data directory: %v", err)
-	}
+    if err := os.MkdirAll("./data", 0755); err != nil {
+        log.Fatalf("Failed to create data directory: %v", err)
+    }
 
-	var err error
-	db, err = sql.Open("sqlite", dbPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
+    var err error
+    db, err = sql.Open("sqlite", dbPath)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer db.Close()
 
-	// 开启 WAL 模式与忙等待超时，解决 SQLite 并发锁库问题
-	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		log.Printf("⚠️  Failed to set WAL mode: %v", err)
-	}
-	if _, err := db.Exec("PRAGMA busy_timeout=5000;"); err != nil {
-		log.Printf("⚠️  Failed to set busy_timeout: %v", err)
-	}
+    // 开启 WAL 模式与忙等待超时，解决 SQLite 并发锁库问题
+    if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+        log.Printf("⚠️  Failed to set WAL mode: %v", err)
+    }
+    if _, err := db.Exec("PRAGMA busy_timeout=5000;"); err != nil {
+        log.Printf("⚠️  Failed to set busy_timeout: %v", err)
+    }
 
-	createTableSQL := `
+    createTableSQL := `
     CREATE TABLE IF NOT EXISTS events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         source TEXT NOT NULL,
@@ -123,450 +123,450 @@ func main() {
     );
     `
 
-	if _, err = db.Exec(createTableSQL); err != nil {
-		log.Fatalf("Failed to create table: %v", err)
-	}
+    if _, err = db.Exec(createTableSQL); err != nil {
+        log.Fatalf("Failed to create table: %v", err)
+    }
 
-	// 给旧数据库自动补充 is_low_freq 字段
-	db.Exec("ALTER TABLE sources_config ADD COLUMN is_low_freq INTEGER DEFAULT 0")
+    // 给旧数据库自动补充 is_low_freq 字段
+    db.Exec("ALTER TABLE sources_config ADD COLUMN is_low_freq INTEGER DEFAULT 0")
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/login", handleLogin)
-	mux.HandleFunc("/api/contributions", handleContributions)
-	mux.HandleFunc("/api/stats", handleGetStats)
-	mux.HandleFunc("/api/health", handleHealth)
-	mux.HandleFunc("/api/sources", handleSources)
+    mux := http.NewServeMux()
+    mux.HandleFunc("/api/login", handleLogin)
+    mux.HandleFunc("/api/contributions", handleContributions)
+    mux.HandleFunc("/api/stats", handleGetStats)
+    mux.HandleFunc("/api/health", handleHealth)
+    mux.HandleFunc("/api/sources", handleSources)
 
-	staticDir := os.Getenv("STATIC_DIR")
-	if staticDir == "" {
-		staticDir = "./static"
-	}
-	mux.Handle("/", http.FileServer(http.Dir(staticDir)))
+    staticDir := os.Getenv("STATIC_DIR")
+    if staticDir == "" {
+        staticDir = "./static"
+    }
+    mux.Handle("/", http.FileServer(http.Dir(staticDir)))
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+    port := os.Getenv("PORT")
+    if port == "" {
+        port = "8080"
+    }
 
-	handler := corsMiddleware(authMiddleware(mux))
+    handler := corsMiddleware(authMiddleware(mux))
 
-	fmt.Printf("🚀 Contribution Graph Server running on http://localhost:%s\n", port)
-	fmt.Println("   Dashboard: /")
-	fmt.Println("   Mobile:    /mobile.html")
-	fmt.Println("   Login:     /login.html")
-	fmt.Println("   API:       POST /api/contributions")
-	fmt.Println("   Sources:   GET/POST/DELETE /api/sources")
-	log.Fatal(http.ListenAndServe(":"+port, handler))
+    fmt.Printf("🚀 Contribution Graph Server running on http://localhost:%s\n", port)
+    fmt.Println("   Dashboard: /")
+    fmt.Println("   Manage:    /manage.html")
+    fmt.Println("   Login:     /login.html")
+    fmt.Println("   API:       POST /api/contributions")
+    fmt.Println("   Sources:   GET/POST/DELETE /api/sources")
+    log.Fatal(http.ListenAndServe(":"+port, handler))
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        w.Header().Set("Access-Control-Allow-Origin", "*")
+        w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+        w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+        if r.Method == http.MethodOptions {
+            w.WriteHeader(http.StatusOK)
+            return
+        }
+        next.ServeHTTP(w, r)
+    })
 }
 
 func authMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if authPassword == "" {
-			next.ServeHTTP(w, r)
-			return
-		}
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        if authPassword == "" {
+            next.ServeHTTP(w, r)
+            return
+        }
 
-		path := r.URL.Path
+        path := r.URL.Path
 
-		if path == "/login.html" || path == "/api/login" || path == "/api/health" {
-			next.ServeHTTP(w, r)
-			return
-		}
+        if path == "/login.html" || path == "/api/login" || path == "/api/health" {
+            next.ServeHTTP(w, r)
+            return
+        }
 
-		cookie, err := r.Cookie("auth_session")
-		isValid := (err == nil && cookie.Value == expectedToken)
+        cookie, err := r.Cookie("auth_session")
+        isValid := (err == nil && cookie.Value == expectedToken)
 
-		if !isValid {
-			if strings.HasPrefix(path, "/api/") {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
-				return
-			}
-			http.Redirect(w, r, "/login.html", http.StatusSeeOther)
-			return
-		}
+        if !isValid {
+            if strings.HasPrefix(path, "/api/") {
+                w.Header().Set("Content-Type", "application/json")
+                w.WriteHeader(http.StatusUnauthorized)
+                json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+                return
+            }
+            http.Redirect(w, r, "/login.html", http.StatusSeeOther)
+            return
+        }
 
-		next.ServeHTTP(w, r)
-	})
+        next.ServeHTTP(w, r)
+    })
 }
 
 func handleLogin(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+    if r.Method != http.MethodPost {
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+        return
+    }
 
-	var req struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
+    var req struct {
+        Username string `json:"username"`
+        Password string `json:"password"`
+    }
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
+    if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+        http.Error(w, "Invalid JSON", http.StatusBadRequest)
+        return
+    }
 
-	if authPassword != "" {
-		if req.Username != authUsername || req.Password != authPassword {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusUnauthorized)
-			json.NewEncoder(w).Encode(map[string]string{"error": "账号或密码错误"})
-			return
-		}
-	}
+    if authPassword != "" {
+        if req.Username != authUsername || req.Password != authPassword {
+            w.Header().Set("Content-Type", "application/json")
+            w.WriteHeader(http.StatusUnauthorized)
+            json.NewEncoder(w).Encode(map[string]string{"error": "账号或密码错误"})
+            return
+        }
+    }
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "auth_session",
-		Value:    expectedToken,
-		Path:     "/",
-		MaxAge:   315360000,
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-	})
+    http.SetCookie(w, &http.Cookie{
+        Name:     "auth_session",
+        Value:    expectedToken,
+        Path:     "/",
+        MaxAge:   315360000,
+        HttpOnly: true,
+        SameSite: http.SameSiteLaxMode,
+    })
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func handleContributions(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		handleGetContributions(w, r)
-	case http.MethodPost:
-		handlePostContribution(w, r)
-	case http.MethodOptions:
-		w.WriteHeader(http.StatusOK)
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
+    switch r.Method {
+    case http.MethodGet:
+        handleGetContributions(w, r)
+    case http.MethodPost:
+        handlePostContribution(w, r)
+    case http.MethodOptions:
+        w.WriteHeader(http.StatusOK)
+    default:
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+    }
 }
 
 func handlePostContribution(w http.ResponseWriter, r *http.Request) {
-	var contributions []Contribution
-	if err := json.NewDecoder(r.Body).Decode(&contributions); err != nil {
-		http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
-		return
-	}
+    var contributions []Contribution
+    if err := json.NewDecoder(r.Body).Decode(&contributions); err != nil {
+        http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+        return
+    }
 
-	tx, err := db.Begin()
-	if err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
+    tx, err := db.Begin()
+    if err != nil {
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
 
-	stmt, err := tx.Prepare(`
+    stmt, err := tx.Prepare(`
         INSERT OR IGNORE INTO events (source, context, timestamp, metadata)
         VALUES (?, ?, ?, ?)
     `)
-	if err != nil {
-		tx.Rollback()
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
-	defer stmt.Close()
+    if err != nil {
+        tx.Rollback()
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
+    defer stmt.Close()
 
-	count := 0
-	for _, c := range contributions {
-		metaString := string(c.MetaData)
-		if metaString == "" {
-			metaString = "{}"
-		}
+    count := 0
+    for _, c := range contributions {
+        metaString := string(c.MetaData)
+        if metaString == "" {
+            metaString = "{}"
+        }
 
-		localTs := c.Timestamp.In(appLocation)
-		localStr := localTs.Format("2006-01-02 15:04:05")
+        localTs := c.Timestamp.In(appLocation)
+        localStr := localTs.Format("2006-01-02 15:04:05")
 
-		if _, err := stmt.Exec(c.Source, c.Context, localStr, metaString); err == nil {
-			count++
-		}
-	}
+        if _, err := stmt.Exec(c.Source, c.Context, localStr, metaString); err == nil {
+            count++
+        }
+    }
 
-	if err := tx.Commit(); err != nil {
-		http.Error(w, "Database error", http.StatusInternalServerError)
-		return
-	}
+    if err := tx.Commit(); err != nil {
+        http.Error(w, "Database error", http.StatusInternalServerError)
+        return
+    }
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"processed": count,
-		"message":   fmt.Sprintf("Processed %d contributions", count),
-	})
-	fmt.Printf("📥 Received %d events (from %d submitted)\n", count, len(contributions))
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusCreated)
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "processed": count,
+        "message":   fmt.Sprintf("Processed %d contributions", count),
+    })
+    fmt.Printf("📥 Received %d events (from %d submitted)\n", count, len(contributions))
 }
 
 func handleGetContributions(w http.ResponseWriter, r *http.Request) {
-	year := r.URL.Query().Get("year")
-	source := r.URL.Query().Get("source")
+    year := r.URL.Query().Get("year")
+    source := r.URL.Query().Get("source")
 
-	if year == "" {
-		year = fmt.Sprintf("%d", time.Now().In(appLocation).Year())
-	}
+    if year == "" {
+        year = fmt.Sprintf("%d", time.Now().In(appLocation).Year())
+    }
 
-	if _, err := strconv.Atoi(year); err != nil {
-		http.Error(w, "Invalid year parameter", http.StatusBadRequest)
-		return
-	}
+    if _, err := strconv.Atoi(year); err != nil {
+        http.Error(w, "Invalid year parameter", http.StatusBadRequest)
+        return
+    }
 
-	startDate := year + "-01-01"
-	endDate := fmt.Sprintf("%d-01-01", mustAtoi(year)+1)
+    startDate := year + "-01-01"
+    endDate := fmt.Sprintf("%d-01-01", mustAtoi(year)+1)
 
-	query := `
+    query := `
         SELECT source, context, timestamp, metadata
         FROM events
         WHERE timestamp >= ? AND timestamp < ?
     `
-	args := []interface{}{startDate, endDate}
+    args := []interface{}{startDate, endDate}
 
-	if source != "" {
-		query += " AND source = ?"
-		args = append(args, source)
-	}
-	query += " ORDER BY timestamp DESC"
+    if source != "" {
+        query += " AND source = ?"
+        args = append(args, source)
+    }
+    query += " ORDER BY timestamp DESC"
 
-	rows, err := db.Query(query, args...)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer rows.Close()
+    rows, err := db.Query(query, args...)
+    if err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    defer rows.Close()
 
-	var events []Contribution
-	for rows.Next() {
-		var c Contribution
-		var metaString string
-		var ts time.Time
+    var events []Contribution
+    for rows.Next() {
+        var c Contribution
+        var metaString string
+        var ts time.Time
 
-		if err := rows.Scan(&c.Source, &c.Context, &ts, &metaString); err != nil {
-			continue
-		}
+        if err := rows.Scan(&c.Source, &c.Context, &ts, &metaString); err != nil {
+            continue
+        }
 
-		c.Timestamp = time.Date(
-			ts.Year(), ts.Month(), ts.Day(),
-			ts.Hour(), ts.Minute(), ts.Second(), ts.Nanosecond(),
-			appLocation,
-		)
-		c.LocalDate = c.Timestamp.Format("2006-01-02")
-		c.MetaData = json.RawMessage(metaString)
-		events = append(events, c)
-	}
+        c.Timestamp = time.Date(
+            ts.Year(), ts.Month(), ts.Day(),
+            ts.Hour(), ts.Minute(), ts.Second(), ts.Nanosecond(),
+            appLocation,
+        )
+        c.LocalDate = c.Timestamp.Format("2006-01-02")
+        c.MetaData = json.RawMessage(metaString)
+        events = append(events, c)
+    }
 
-	if events == nil {
-		events = []Contribution{}
-	}
+    if events == nil {
+        events = []Contribution{}
+    }
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(events)
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(events)
 }
 
 func handleGetStats(w http.ResponseWriter, r *http.Request) {
-	stats := make(map[string]interface{})
+    stats := make(map[string]interface{})
 
-	var total int
-	db.QueryRow("SELECT COUNT(*) FROM events").Scan(&total)
-	stats["total"] = total
+    var total int
+    db.QueryRow("SELECT COUNT(*) FROM events").Scan(&total)
+    stats["total"] = total
 
-	rows, err := db.Query(`
+    rows, err := db.Query(`
         SELECT source, COUNT(*) as count
         FROM events
         GROUP BY source
         ORDER BY count DESC
     `)
-	if err == nil {
-		defer rows.Close()
-		sources := make(map[string]int)
-		for rows.Next() {
-			var source string
-			var count int
-			rows.Scan(&source, &count)
-			sources[source] = count
-		}
-		stats["by_source"] = sources
-	}
+    if err == nil {
+        defer rows.Close()
+        sources := make(map[string]int)
+        for rows.Next() {
+            var source string
+            var count int
+            rows.Scan(&source, &count)
+            sources[source] = count
+        }
+        stats["by_source"] = sources
+    }
 
-	stats["current_streak"] = calculateStreak()
+    stats["current_streak"] = calculateStreak()
 
-	todayStr := time.Now().In(appLocation).Format("2006-01-02")
-	var today int
-	db.QueryRow(`
+    todayStr := time.Now().In(appLocation).Format("2006-01-02")
+    var today int
+    db.QueryRow(`
         SELECT COUNT(*) FROM events
         WHERE date(timestamp) = ?
     `, todayStr).Scan(&today)
-	stats["today"] = today
-	stats["timezone"] = appLocation.String()
-	stats["today_date"] = todayStr
+    stats["today"] = today
+    stats["timezone"] = appLocation.String()
+    stats["today_date"] = todayStr
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(stats)
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(stats)
 }
 
 func handleSources(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodOptions {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
+    if r.Method == http.MethodOptions {
+        w.WriteHeader(http.StatusOK)
+        return
+    }
 
-	switch r.Method {
-	case http.MethodGet:
-		rows, err := db.Query("SELECT id, name, emoji, color, is_low_freq FROM sources_config")
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		defer rows.Close()
+    switch r.Method {
+    case http.MethodGet:
+        rows, err := db.Query("SELECT id, name, emoji, color, is_low_freq FROM sources_config")
+        if err != nil {
+            http.Error(w, err.Error(), http.StatusInternalServerError)
+            return
+        }
+        defer rows.Close()
 
-		var configs []EventSourceConfig
-		for rows.Next() {
-			var c EventSourceConfig
-			var isLowFreqInt int
-			if err := rows.Scan(&c.ID, &c.Name, &c.Emoji, &c.Color, &isLowFreqInt); err == nil {
-				c.IsLowFreq = isLowFreqInt == 1
-				configs = append(configs, c)
-			}
-		}
-		if configs == nil {
-			configs = []EventSourceConfig{}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(configs)
+        var configs []EventSourceConfig
+        for rows.Next() {
+            var c EventSourceConfig
+            var isLowFreqInt int
+            if err := rows.Scan(&c.ID, &c.Name, &c.Emoji, &c.Color, &isLowFreqInt); err == nil {
+                c.IsLowFreq = isLowFreqInt == 1
+                configs = append(configs, c)
+            }
+        }
+        if configs == nil {
+            configs = []EventSourceConfig{}
+        }
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(configs)
 
-	case http.MethodPost:
-		var c EventSourceConfig
-		if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
-			http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
-			return
-		}
-		if c.ID == "" || c.Name == "" {
-			http.Error(w, "ID and Name are required", http.StatusBadRequest)
-			return
-		}
-		if c.Emoji == "" {
-			c.Emoji = "📱"
-		}
-		if c.Color == "" {
-			c.Color = "#8b949e"
-		}
+    case http.MethodPost:
+        var c EventSourceConfig
+        if err := json.NewDecoder(r.Body).Decode(&c); err != nil {
+            http.Error(w, "Invalid JSON: "+err.Error(), http.StatusBadRequest)
+            return
+        }
+        if c.ID == "" || c.Name == "" {
+            http.Error(w, "ID and Name are required", http.StatusBadRequest)
+            return
+        }
+        if c.Emoji == "" {
+            c.Emoji = "📱"
+        }
+        if c.Color == "" {
+            c.Color = "#8b949e"
+        }
 
-		isLowFreqInt := 0
-		if c.IsLowFreq {
-			isLowFreqInt = 1
-		}
+        isLowFreqInt := 0
+        if c.IsLowFreq {
+            isLowFreqInt = 1
+        }
 
-		_, err := db.Exec(`
+        _, err := db.Exec(`
             INSERT INTO sources_config (id, name, emoji, color, is_low_freq) VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET name=excluded.name, emoji=excluded.emoji, color=excluded.color, is_low_freq=excluded.is_low_freq
         `, c.ID, c.Name, c.Emoji, c.Color, isLowFreqInt)
 
-		if err != nil {
-			http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+        if err != nil {
+            http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+            return
+        }
+        w.WriteHeader(http.StatusOK)
+        json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 
-	case http.MethodDelete:
-		source := r.URL.Query().Get("source")
-		if source == "" {
-			http.Error(w, "missing source parameter", http.StatusBadRequest)
-			return
-		}
+    case http.MethodDelete:
+        source := r.URL.Query().Get("source")
+        if source == "" {
+            http.Error(w, "missing source parameter", http.StatusBadRequest)
+            return
+        }
 
-		tx, err := db.Begin()
-		if err != nil {
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
-		}
+        tx, err := db.Begin()
+        if err != nil {
+            http.Error(w, "Database error", http.StatusInternalServerError)
+            return
+        }
 
-		resEvents, _ := tx.Exec(`DELETE FROM events WHERE source = ?`, source)
-		resConfig, _ := tx.Exec(`DELETE FROM sources_config WHERE id = ?`, source)
+        resEvents, _ := tx.Exec(`DELETE FROM events WHERE source = ?`, source)
+        resConfig, _ := tx.Exec(`DELETE FROM sources_config WHERE id = ?`, source)
 
-		if err := tx.Commit(); err != nil {
-			http.Error(w, "Database error", http.StatusInternalServerError)
-			return
-		}
+        if err := tx.Commit(); err != nil {
+            http.Error(w, "Database error", http.StatusInternalServerError)
+            return
+        }
 
-		affectedEvents, _ := resEvents.RowsAffected()
-		affectedConfig, _ := resConfig.RowsAffected()
+        affectedEvents, _ := resEvents.RowsAffected()
+        affectedConfig, _ := resConfig.RowsAffected()
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"deleted_events": affectedEvents,
-			"deleted_config": affectedConfig,
-			"source":         source,
-		})
-		fmt.Printf("🗑️  Deleted source %q: %d events removed\n", source, affectedEvents)
+        w.Header().Set("Content-Type", "application/json")
+        json.NewEncoder(w).Encode(map[string]interface{}{
+            "deleted_events": affectedEvents,
+            "deleted_config": affectedConfig,
+            "source":         source,
+        })
+        fmt.Printf("🗑️  Deleted source %q: %d events removed\n", source, affectedEvents)
 
-	default:
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	}
+    default:
+        http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+    }
 }
 
 func calculateStreak() int {
-	rows, err := db.Query(`
+    rows, err := db.Query(`
         SELECT DISTINCT date(timestamp) as day
         FROM events
         ORDER BY day DESC
         LIMIT 365
     `)
-	if err != nil {
-		return 0
-	}
-	defer rows.Close()
+    if err != nil {
+        return 0
+    }
+    defer rows.Close()
 
-	streak := 0
-	nowLocal := time.Now().In(appLocation)
-	expectedStr := nowLocal.Format("2006-01-02")
-	expectedDate, _ := time.ParseInLocation("2006-01-02", expectedStr, appLocation)
+    streak := 0
+    nowLocal := time.Now().In(appLocation)
+    expectedStr := nowLocal.Format("2006-01-02")
+    expectedDate, _ := time.ParseInLocation("2006-01-02", expectedStr, appLocation)
 
-	for rows.Next() {
-		var dayStr string
-		rows.Scan(&dayStr)
-		day, err := time.ParseInLocation("2006-01-02", dayStr, appLocation)
-		if err != nil {
-			continue
-		}
+    for rows.Next() {
+        var dayStr string
+        rows.Scan(&dayStr)
+        day, err := time.ParseInLocation("2006-01-02", dayStr, appLocation)
+        if err != nil {
+            continue
+        }
 
-		if day.Equal(expectedDate) || day.Equal(expectedDate.AddDate(0, 0, -1)) {
-			if day.Equal(expectedDate.AddDate(0, 0, -1)) && streak == 0 {
-				expectedDate = day
-			}
-			streak++
-			expectedDate = day.AddDate(0, 0, -1)
-		} else if day.Before(expectedDate) {
-			break
-		}
-	}
-	return streak
+        if day.Equal(expectedDate) || day.Equal(expectedDate.AddDate(0, 0, -1)) {
+            if day.Equal(expectedDate.AddDate(0, 0, -1)) && streak == 0 {
+                expectedDate = day
+            }
+            streak++
+            expectedDate = day.AddDate(0, 0, -1)
+        } else if day.Before(expectedDate) {
+            break
+        }
+    }
+    return streak
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":   "ok",
-		"timezone": appLocation.String(),
-		"now":      time.Now().In(appLocation).Format(time.RFC3339),
-	})
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "status":   "ok",
+        "timezone": appLocation.String(),
+        "now":      time.Now().In(appLocation).Format(time.RFC3339),
+    })
 }
 
 func mustAtoi(s string) int {
-	n, err := strconv.Atoi(s)
-	if err != nil {
-		panic(err)
-	}
-	return n
+    n, err := strconv.Atoi(s)
+    if err != nil {
+        panic(err)
+    }
+    return n
 }

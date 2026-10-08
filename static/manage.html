@@ -340,7 +340,6 @@ async function initData() {
     }
 }
 
-// 自动生成唯一 ID，无需用户干预
 function generateUniqueSourceId() {
     return 'src_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7);
 }
@@ -478,7 +477,6 @@ async function saveEvent() {
         return;
     }
 
-    // 若为修改则沿用现有 ID；若为新增则在后台自动生成唯一下发 ID
     const targetId = editingIndex >= 0 ? eventsList[editingIndex].id : generateUniqueSourceId();
     
     const payload = {

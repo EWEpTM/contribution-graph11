@@ -209,6 +209,8 @@
         #heatmap {
             min-width: 0;
             transition: height 0.2s;
+            -webkit-transform: translateZ(0);
+            transform: translateZ(0);
         }
 
         .legend {
@@ -475,7 +477,7 @@
     </div>
 
     <footer>
-        <a href="/mobile.html">⚙️ 事件类型配置</a>
+        <a href="/manage.html">⚙️ 事件类型配置</a>
     </footer>
 </div>
 
@@ -570,6 +572,11 @@ let pendingTargetSource = null;
 let allData = [];
 let statsData = {};
 let chart = null;
+
+function isIOSDevice() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
 
 async function init() {
     await loadSourceColorsFromDB();
@@ -698,7 +705,6 @@ async function submitLog() {
 
         if (res.ok) {
             showToast('✅ 记录成功！');
-            // 立即加载并渲染，告别延迟
             await loadStats();
             await loadData();
             render();
@@ -803,21 +809,21 @@ function renderStats() {
 
 function renderHeatmap() {
     const isCombined = currentSource === 'combined';
-    
+
     const modeSel = document.getElementById('combineMode');
     modeSel.style.display = isCombined ? '' : 'none';
 
     const c = isCombined
         ? { hex: 'linear-gradient(135deg,#238636,#3b82f6)', name: '全部' }
         : getColor(currentSource);
-    document.getElementById('badgeDot').style.background = typeof c.hex === 'string' && c.hex.startsWith('#') ? c.hex : '#238636';
+    document.getElementById('badgeDot').style.background =
+        typeof c.hex === 'string' && c.hex.startsWith('#') ? c.hex : '#238636';
     document.getElementById('badgeName').textContent = c.name || currentSource;
 
     const data = isCombined ? allData : allData.filter(x => x.source === currentSource);
 
     const days = {};
     data.forEach(item => {
-        // 优先利用后端返回的 local_date 字段，提高稳健性
         const dt = item.local_date || (item.timestamp || '').split('T')[0];
         if (!dt) return;
         if (!days[dt]) days[dt] = { total: 0, src: {} };
@@ -861,8 +867,11 @@ function renderHeatmap() {
 
     const el = document.getElementById('heatmap');
     const wrap = el.parentElement;
-    const avail = wrap.clientWidth || 800;
     const isMobile = window.innerWidth < 640;
+
+    void wrap.offsetWidth;
+    let avail = wrap.clientWidth || window.innerWidth || 800;
+    if (avail < 100) avail = window.innerWidth || 320;
 
     const leftPad = isMobile ? 22 : 42;
     const rightPad = isMobile ? 4 : 20;
@@ -880,68 +889,87 @@ function renderHeatmap() {
     el.style.width = graphW + 'px';
     el.style.height = graphH + 'px';
 
-    // 优化：重用 Chart 实例，避免闪烁和性能浪费
-    if (!chart) {
-        chart = echarts.init(el, 'dark');
-    } else {
-        chart.resize({ width: graphW, height: graphH });
-    }
-
-    chart.setOption({
-        backgroundColor: 'transparent',
-        tooltip: {
-            appendToBody: true,
-            confine: false,
-            extraCssText: 'z-index: 9999; pointer-events: none;',
-            position: function (point, params, dom, rect, size) {
-                const x = point[0];
-                const y = point[1] - size.contentSize[1] - 12;
-                return [x, Math.max(8, y)];
-            },
-            formatter: p => {
-                if (!p.data || !p.data.value) return '';
-                const date = p.data.value[0];
-                const count = p.data.value[1];
-                const dayStats = days[date];
-                let tip = `<b>${date}</b><br/>${count} 次`;
-                if (isCombined && dayStats) {
-                    tip += '<br/>';
-                    Object.entries(dayStats.src)
-                        .sort((a, b) => b[1] - a[1])
-                        .forEach(([src, cnt]) => {
-                            const info = getColor(src);
-                            tip += `<br/><span style="color:${info.hex}">●</span> ${info.name}：${cnt}`;
-                        });
-                }
-                return tip;
-            }
-        },
-        calendar: {
-            top: isMobile ? 20 : Math.max(26, cell * 1.5),
-            left: leftPad,
-            right: rightPad,
-            cellSize: [cell, cell],
-            range: year.toString(),
-            itemStyle: { color: '#161b22', borderColor: '#0d1117', borderWidth: 1 },
-            splitLine: { show: false },
-            yearLabel: { show: false },
-            dayLabel: {
-                color: '#8b949e',
-                firstDay: 1,
-                nameMap: ['7', '1', '2', '3', '4', '5', '6'],
-                fontSize: Math.max(10, Math.floor(cell * 0.7))
-            },
-            monthLabel: { 
-                color: '#8b949e', 
-                fontSize: Math.max(11, Math.floor(cell * 0.75)) 
-            }
-        },
-        series: {
-            type: 'heatmap',
-            coordinateSystem: 'calendar',
-            data: chartData
+    const draw = () => {
+        if (chart && isIOSDevice()) {
+            try { chart.dispose(); } catch (_) {}
+            chart = null;
         }
-    }, true);
+
+        if (!chart) {
+            chart = echarts.init(el, 'dark', {
+                width: graphW,
+                height: graphH,
+                renderer: 'canvas'
+            });
+        } else {
+            chart.resize({ width: graphW, height: graphH });
+        }
+
+        chart.setOption({
+            backgroundColor: 'transparent',
+            animation: false,
+            tooltip: {
+                appendToBody: true,
+                confine: false,
+                extraCssText: 'z-index: 9999; pointer-events: none;',
+                position: function (point, params, dom, rect, size) {
+                    const x = point[0];
+                    const y = point[1] - size.contentSize[1] - 12;
+                    return [x, Math.max(8, y)];
+                },
+                formatter: p => {
+                    if (!p.data || !p.data.value) return '';
+                    const date = p.data.value[0];
+                    const count = p.data.value[1];
+                    const dayStats = days[date];
+                    let tip = `<b>${date}</b><br/>${count} 次`;
+                    if (isCombined && dayStats) {
+                        tip += '<br/>';
+                        Object.entries(dayStats.src)
+                            .sort((a, b) => b[1] - a[1])
+                            .forEach(([src, cnt]) => {
+                                const info = getColor(src);
+                                tip += `<br/><span style="color:${info.hex}">●</span> ${info.name}：${cnt}`;
+                            });
+                    }
+                    return tip;
+                }
+            },
+            calendar: {
+                top: isMobile ? 20 : Math.max(26, cell * 1.5),
+                left: leftPad,
+                right: rightPad,
+                cellSize: [cell, cell],
+                range: year.toString(),
+                itemStyle: { color: '#161b22', borderColor: '#0d1117', borderWidth: 1 },
+                splitLine: { show: false },
+                yearLabel: { show: false },
+                dayLabel: {
+                    color: '#8b949e',
+                    firstDay: 1,
+                    nameMap: ['7', '1', '2', '3', '4', '5', '6'],
+                    fontSize: Math.max(10, Math.floor(cell * 0.7))
+                },
+                monthLabel: {
+                    color: '#8b949e',
+                    fontSize: Math.max(11, Math.floor(cell * 0.75))
+                }
+            },
+            series: {
+                type: 'heatmap',
+                coordinateSystem: 'calendar',
+                data: chartData
+            }
+        }, true);
+
+        requestAnimationFrame(() => {
+            if (chart && !chart.isDisposed()) {
+                chart.resize({ width: graphW, height: graphH });
+            }
+        });
+    };
+
+    requestAnimationFrame(draw);
 }
 
 function getCombinedColor(stats) {
@@ -975,7 +1003,9 @@ function getCombinedColor(stats) {
 
 window.addEventListener('resize', () => {
     clearTimeout(window.__rz);
-    window.__rz = setTimeout(() => { if (allData) renderHeatmap(); }, 150);
+    window.__rz = setTimeout(() => {
+        if (allData) renderHeatmap();
+    }, 200);
 });
 
 init();
