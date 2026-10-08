@@ -153,6 +153,30 @@
         .graph-title .badge .dot {
             width: 8px; height: 8px; border-radius: 50%;
         }
+
+        /* 记录按钮样式 */
+        .record-btn {
+            background: var(--green);
+            color: #fff;
+            border: none;
+            padding: 0.25rem 0.75rem;
+            border-radius: 16px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+        .record-btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+        .record-btn:active {
+            transform: scale(0.95);
+        }
+
         select {
             background: var(--bg3);
             color: var(--text);
@@ -225,7 +249,7 @@
 </head>
 <body>
 <div class="container">
-    <h1>开放贡献热力图</h1>
+    <h1>热力图</h1>
 
     <!-- 来源 Tab -->
     <div class="source-tabs" id="sourceTabs"></div>
@@ -259,6 +283,8 @@
                     <span class="dot" id="badgeDot"></span>
                     <span id="badgeName">全部</span>
                 </span>
+                <!-- 仅在选择特定事件时显示的记录按钮 -->
+                <button class="record-btn" id="recordBtn" style="display:none;" onclick="logCurrentEvent()">+ 记录</button>
             </div>
             <div style="display:flex;gap:0.5rem;align-items:center;">
                 <select id="combineMode" style="display:none;" title="合并方式">
@@ -276,8 +302,7 @@
     </div>
 
     <footer>
-        <a href="/mobile.html">记录</a> ·
-        <a href="https://github.com/EWEpTM/contribution-graph11">GitHub</a>
+        <a href="/mobile.html">事件</a>
     </footer>
 </div>
 
@@ -399,6 +424,37 @@ async function loadData() {
     }
 }
 
+/* ========== 记录事件 ========== */
+async function logCurrentEvent() {
+    if (currentSource === 'combined') return;
+    const info = getColor(currentSource);
+    const eventName = info.name || currentSource;
+
+    if (confirm(`确定要为「${eventName}」记录一次吗？`)) {
+        try {
+            const res = await fetch('/api/contributions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify([{
+                    source: currentSource,
+                    context: 'manual',
+                    timestamp: new Date().toISOString(),
+                    metadata: { device: 'web', manual: true }
+                }])
+            });
+            if (res.ok) {
+                await loadStats();
+                await loadData();
+                render();
+            } else {
+                alert('记录失败，请重试');
+            }
+        } catch (e) {
+            alert('网络连接失败');
+        }
+    }
+}
+
 /* ========== 渲染 ========== */
 function render() {
     renderTabs();
@@ -482,8 +538,15 @@ function renderStats() {
 
 function renderHeatmap() {
     const isCombined = currentSource === 'combined';
+    
+    // 控制合并模式与记录按钮的显示/隐藏
     const modeSel = document.getElementById('combineMode');
     modeSel.style.display = isCombined ? '' : 'none';
+
+    const recordBtn = document.getElementById('recordBtn');
+    if (recordBtn) {
+        recordBtn.style.display = isCombined ? 'none' : 'inline-flex';
+    }
 
     const c = isCombined
         ? { hex: 'linear-gradient(135deg,#238636,#3b82f6)', name: '全部' }
@@ -510,7 +573,6 @@ function renderHeatmap() {
             const sc = getColor(currentSource);
             let opacity;
             if (sc.is_low_freq) {
-                // 少量事件：打卡1次即为 0.65 正常亮度，多于1次渐变增亮至 1.0
                 opacity = Math.min(1, 0.65 + (stats.total - 1) * 0.12);
             } else {
                 opacity = Math.min(1, Math.max(0.3, stats.total / 10));
