@@ -19,6 +19,7 @@ import (
 
 // Contribution represents the unified event structure
 type Contribution struct {
+    ID        int64           `json:"id,omitempty"`
     Source    string          `json:"source"`
     Context   string          `json:"context"`
     Timestamp time.Time       `json:"timestamp"`
@@ -279,6 +280,8 @@ func handleContributions(w http.ResponseWriter, r *http.Request) {
         handleGetContributions(w, r)
     case http.MethodPost:
         handlePostContribution(w, r)
+    case http.MethodDelete:
+        handleDeleteContribution(w, r)
     case http.MethodOptions:
         w.WriteHeader(http.StatusOK)
     default:
@@ -339,6 +342,36 @@ func handlePostContribution(w http.ResponseWriter, r *http.Request) {
     fmt.Printf("📥 Received %d events (from %d submitted)\n", count, len(contributions))
 }
 
+// DELETE /api/contributions?id=<event_id>  删除单条打卡记录
+func handleDeleteContribution(w http.ResponseWriter, r *http.Request) {
+    idStr := r.URL.Query().Get("id")
+    if idStr == "" {
+        http.Error(w, "missing id parameter", http.StatusBadRequest)
+        return
+    }
+    id, err := strconv.ParseInt(idStr, 10, 64)
+    if err != nil || id <= 0 {
+        http.Error(w, "invalid id parameter", http.StatusBadRequest)
+        return
+    }
+
+    res, err := db.Exec(`DELETE FROM events WHERE id = ?`, id)
+    if err != nil {
+        http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
+        return
+    }
+
+    n, _ := res.RowsAffected()
+    w.Header().Set("Content-Type", "application/json")
+    if n == 0 {
+        w.WriteHeader(http.StatusNotFound)
+        json.NewEncoder(w).Encode(map[string]interface{}{"status": "not_found", "deleted": 0})
+        return
+    }
+    fmt.Printf("🗑️  Deleted event id=%d (%d row)\n", id, n)
+    json.NewEncoder(w).Encode(map[string]interface{}{"status": "success", "deleted": n})
+}
+
 func handleGetContributions(w http.ResponseWriter, r *http.Request) {
     year := r.URL.Query().Get("year")
     source := r.URL.Query().Get("source")
@@ -356,7 +389,7 @@ func handleGetContributions(w http.ResponseWriter, r *http.Request) {
     endDate := fmt.Sprintf("%d-01-01", mustAtoi(year)+1)
 
     query := `
-        SELECT source, context, timestamp, metadata
+        SELECT id, source, context, timestamp, metadata
         FROM events
         WHERE timestamp >= ? AND timestamp < ?
     `
@@ -381,7 +414,7 @@ func handleGetContributions(w http.ResponseWriter, r *http.Request) {
         var metaString string
         var ts time.Time
 
-        if err := rows.Scan(&c.Source, &c.Context, &ts, &metaString); err != nil {
+        if err := rows.Scan(&c.ID, &c.Source, &c.Context, &ts, &metaString); err != nil {
             continue
         }
 

@@ -26,6 +26,7 @@
             --green-hover: #2ea043;
             --blue: #3b82f6;
             --orange: #f97316;
+            --danger: #f85149;
             --safe-bottom: env(safe-area-inset-bottom, 0px);
             --page-pad-x: clamp(0.5rem, 2vw, 2rem);
             --page-pad-y: clamp(0.6rem, 1.5vw, 2.5rem);
@@ -342,6 +343,60 @@
             border: 1px solid var(--border);
         }
         .btn-modal-confirm { background: var(--green); color: #fff; }
+        .detail-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: min(420px, 60dvh);
+            overflow-y: auto;
+            padding: 2px;
+        }
+        .detail-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 14px;
+        }
+        .detail-time {
+            font-size: 1.05rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            color: var(--text);
+            min-width: 76px;
+        }
+        .detail-ctx {
+            flex: 1;
+            font-size: 0.85rem;
+            color: var(--muted);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .detail-del {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            border-radius: 8px;
+            padding: 4px 14px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+        .detail-del:hover {
+            color: var(--danger);
+            border-color: var(--danger);
+            background: rgba(248,81,73,0.1);
+        }
+        .detail-empty {
+            text-align: center;
+            color: var(--muted);
+            padding: 28px 0;
+            font-size: 0.9rem;
+        }
         #toast {
             visibility: hidden;
             opacity: 0;
@@ -444,6 +499,29 @@
         <div class="modal-actions">
             <button class="btn-modal btn-modal-cancel" onclick="closeConfirmModal()">取消</button>
             <button class="btn-modal btn-modal-confirm" onclick="submitLog()">确定</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="detailModal">
+    <div class="custom-modal" style="max-width: 420px;">
+        <div class="modal-header">
+            <div class="modal-title" id="detailTitle">打卡详情</div>
+            <button class="modal-close" onclick="closeDetailModal()">×</button>
+        </div>
+        <div class="detail-list" id="detailList"></div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="delConfirmModal">
+    <div class="custom-modal" style="max-width: 360px;">
+        <div class="modal-title" style="margin-bottom:10px;">确认删除</div>
+        <p style="color:var(--muted);font-size:0.95rem;margin-bottom:20px;">
+            确定要删除 <strong id="delTargetDesc" style="color:var(--text)"></strong> 这条记录吗？
+        </p>
+        <div class="modal-actions">
+            <button class="btn-modal btn-modal-cancel" onclick="closeDelConfirmModal()">取消</button>
+            <button class="btn-modal btn-modal-confirm" onclick="confirmDelete()">删除</button>
         </div>
     </div>
 </div>
@@ -648,6 +726,119 @@ function showToast(msg) {
     setTimeout(() => toast.classList.remove('show'), 2000);
 }
 
+function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, function (ch) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+}
+
+function fmtTime(t) {
+    if (!t) return '';
+    if (t.length >= 19) return t.slice(11, 19);
+    if (t.length >= 16) return t.slice(11, 16);
+    return t;
+}
+
+let detailDate = null;
+let detailRecords = [];
+let pendingDeleteId = null;
+
+function onHeatmapClick(params) {
+    // 仅在具体事件视图下生效，全部视图点击不弹窗
+    if (currentSource === 'combined') return;
+    if (!params || !params.data || !params.data.value) return;
+    const date = params.data.value[0];
+    if (!date) return;
+    const recs = (allData || []).filter(function (c) {
+        return c.source === currentSource &&
+            (c.local_date || (c.timestamp || '').slice(0, 10)) === date;
+    });
+    if (recs.length === 0) { showToast('当天没有记录'); return; }
+    detailDate = date;
+    detailRecords = recs.slice().sort(function (a, b) {
+        return (a.timestamp || '').localeCompare(b.timestamp || '');
+    });
+    openDetailModal();
+}
+
+function openDetailModal() {
+    const info = getColor(currentSource);
+    const name = escapeHtml(info.name || currentSource);
+    document.getElementById('detailTitle').textContent = '「' + name + '」 ' + detailDate + ' 打卡记录';
+    renderDetailList();
+    document.getElementById('detailModal').classList.add('show');
+}
+
+function renderDetailList() {
+    const wrap = document.getElementById('detailList');
+    if (!detailRecords.length) {
+        wrap.innerHTML = '<div class="detail-empty">当天没有记录</div>';
+        return;
+    }
+    wrap.innerHTML = detailRecords.map(function (c) {
+        const hm = fmtTime(c.timestamp);
+        const ctx = (c.context && c.context !== 'manual') ? c.context : '';
+        return '<div class="detail-row">' +
+            '<span class="detail-time">' + hm + '</span>' +
+            '<span class="detail-ctx">' + escapeHtml(ctx) + '</span>' +
+            '<button class="detail-del" onclick="requestDelete(' + c.id + ')">删除</button>' +
+            '</div>';
+    }).join('');
+}
+
+function closeDetailModal() {
+    document.getElementById('detailModal').classList.remove('show');
+    document.getElementById('detailList').innerHTML = '';
+    detailDate = null;
+    detailRecords = [];
+    pendingDeleteId = null;
+}
+
+function requestDelete(id) {
+    pendingDeleteId = id;
+    let rec = null;
+    detailRecords.forEach(function (c) { if (c.id === id) rec = c; });
+    const hm = rec ? fmtTime(rec.timestamp) : '';
+    const ctx = rec && rec.context && rec.context !== 'manual' ? '（' + rec.context + '）' : '';
+    document.getElementById('delTargetDesc').textContent = (detailDate || '') + ' ' + hm + ctx;
+    document.getElementById('delConfirmModal').classList.add('show');
+}
+
+function closeDelConfirmModal() {
+    document.getElementById('delConfirmModal').classList.remove('show');
+    pendingDeleteId = null;
+}
+
+async function confirmDelete() {
+    const id = pendingDeleteId;
+    if (id == null) return;
+    closeDelConfirmModal();
+    try {
+        const res = await fetch('/api/contributions?id=' + encodeURIComponent(id), { method: 'DELETE' });
+        if (res.status === 401) { window.location.href = '/login.html'; return; }
+        if (res.ok) {
+            allData = allData.filter(function (c) { return c.id !== id; });
+            showToast('🗑️ 已删除');
+            await loadStats();
+            render();
+            const recs = (allData || []).filter(function (c) {
+                return c.source === currentSource &&
+                    (c.local_date || (c.timestamp || '').slice(0, 10)) === detailDate;
+            });
+            detailRecords = recs.slice().sort(function (a, b) {
+                return (a.timestamp || '').localeCompare(b.timestamp || '');
+            });
+            if (detailRecords.length === 0) { closeDetailModal(); return; }
+            renderDetailList();
+        } else {
+            showToast('❌ 删除失败，请重试');
+        }
+    } catch (e) {
+        showToast('❌ 网络请求失败');
+    }
+}
+
 function render() {
     renderTabs();
     renderStats();
@@ -797,6 +988,7 @@ function renderHeatmap() {
         }
         if (!chart) {
             chart = echarts.init(el, 'dark', { width: graphW, height: graphH, renderer: 'canvas' });
+            chart.on('click', onHeatmapClick);
         } else {
             chart.resize({ width: graphW, height: graphH });
         }
