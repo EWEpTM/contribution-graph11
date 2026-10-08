@@ -2,35 +2,48 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="theme-color" content="#0d1117">
     <title>事件配置</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        html {
+            height: 100%;
+            -webkit-text-size-adjust: 100%;
+        }
         body {
             background: #0d1117;
             color: #fff;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-            min-height: 100vh;
-            padding: 16px;
+            min-height: 100%;
+            min-height: 100dvh;
+            padding: max(12px, env(safe-area-inset-top)) clamp(12px, 3vw, 24px) max(12px, env(safe-area-inset-bottom));
             display: flex;
             flex-direction: column;
+            max-width: 1100px;
+            margin: 0 auto;
+            width: 100%;
         }
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1rem;
+            margin-bottom: clamp(0.75rem, 2vw, 1.25rem);
+            flex-shrink: 0;
+            gap: 8px;
         }
-        h1 { font-size: 1.25rem; color: #e6edf3; }
+        h1 {
+            font-size: clamp(1.1rem, 2.5vw, 1.4rem);
+            color: #e6edf3;
+        }
         .edit-btn {
             background: #21262d;
             border: 1px solid #30363d;
             color: #8b949e;
-            padding: 8px 16px;
+            padding: clamp(6px, 1.5vw, 10px) clamp(12px, 2.5vw, 18px);
             border-radius: 8px;
-            font-size: 0.85rem;
+            font-size: clamp(0.8rem, 1.5vw, 0.9rem);
             cursor: pointer;
         }
         .edit-btn.active {
@@ -40,22 +53,26 @@
         }
         .grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
+            grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
+            gap: clamp(10px, 2vw, 16px);
             flex: 1;
             align-content: start;
+            min-height: 0;
         }
-        @media (min-width: 600px) {
-            .grid { grid-template-columns: repeat(3, 1fr); }
+        @media (min-width: 480px) {
+            .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
         }
-        @media (min-width: 900px) {
-            .grid { grid-template-columns: repeat(4, 1fr); }
+        @media (min-width: 768px) {
+            .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+        }
+        @media (min-width: 1024px) {
+            .grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
         }
         .btn {
             border: none;
             border-radius: 16px;
-            padding: 24px 16px;
-            font-size: 1rem;
+            padding: clamp(16px, 3vw, 28px) clamp(10px, 2vw, 16px);
+            font-size: clamp(0.9rem, 1.8vw, 1.05rem);
             font-weight: 600;
             color: #fff;
             display: flex;
@@ -67,9 +84,10 @@
             transition: transform 0.1s, opacity 0.2s;
             -webkit-tap-highlight-color: transparent;
             position: relative;
+            min-height: clamp(100px, 18vw, 140px);
         }
         .btn:active { transform: scale(0.98); opacity: 0.9; }
-        .btn .emoji { font-size: 2rem; }
+        .btn .emoji { font-size: clamp(1.6rem, 4vw, 2.2rem); }
         .add-btn {
             background: #21262d;
             border: 2px dashed #30363d;
@@ -83,7 +101,7 @@
             z-index: 200;
             align-items: center;
             justify-content: center;
-            padding: 16px;
+            padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
             backdrop-filter: blur(4px);
         }
         .modal.show { display: flex; }
@@ -91,15 +109,15 @@
             background: #161b22;
             border: 1px solid #30363d;
             border-radius: 16px;
-            padding: 20px;
+            padding: clamp(16px, 3vw, 22px);
             width: 100%;
-            max-width: 360px;
-            max-height: 90vh;
+            max-width: min(400px, 94vw);
+            max-height: min(90dvh, 90vh);
             overflow-y: auto;
             box-shadow: 0 10px 30px rgba(0,0,0,0.6);
         }
         .modal h2 {
-            font-size: 1.1rem;
+            font-size: clamp(1rem, 2.2vw, 1.15rem);
             margin-bottom: 16px;
             color: #e6edf3;
         }
@@ -162,12 +180,14 @@
             background: #0d1117;
             cursor: pointer;
             padding: 2px;
+            flex-shrink: 0;
         }
         .custom-color-row input[type="text"] {
             flex: 1;
             margin-bottom: 0;
             font-family: monospace, monospace;
             text-transform: uppercase;
+            min-width: 0;
         }
 
         .checkbox-row {
@@ -186,6 +206,7 @@
             height: 18px;
             accent-color: #238636;
             cursor: pointer;
+            flex-shrink: 0;
         }
         .checkbox-row label {
             margin-bottom: 0;
@@ -236,13 +257,14 @@
         }
         .footer {
             text-align: center;
-            margin-top: 1rem;
+            margin-top: clamp(0.75rem, 2vw, 1.25rem);
             padding: 8px 0;
+            flex-shrink: 0;
         }
         .footer a {
             color: #58a6ff;
             text-decoration: none;
-            font-size: 0.9rem;
+            font-size: clamp(0.85rem, 1.5vw, 0.95rem);
         }
     </style>
 </head>
@@ -257,7 +279,6 @@
     <div class="grid" id="grid"></div>
     <div class="footer"><a href="/">← 返回主页</a></div>
 
-    <!-- 新增 / 编辑弹窗（完全隐藏 Source ID 字段） -->
     <div class="modal" id="modal">
         <div class="modal-content">
             <h2 id="modalTitle">添加事件类型</h2>
@@ -291,7 +312,6 @@
         </div>
     </div>
 
-    <!-- 彻底删除确认弹窗 -->
     <div class="modal" id="deleteModal">
         <div class="modal-content" style="max-width:320px;">
             <h2 style="color:#f85149;">确认彻底删除</h2>

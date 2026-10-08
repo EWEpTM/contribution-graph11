@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#0d1117">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Keep</title>
@@ -19,56 +19,70 @@
             --green-hover: #2ea043;
             --blue: #3b82f6;
             --orange: #f97316;
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+            --page-pad-x: clamp(0.5rem, 2vw, 2rem);
+            --page-pad-y: clamp(0.6rem, 1.5vw, 2.5rem);
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        html {
+            height: 100%;
+            -webkit-text-size-adjust: 100%;
+        }
         body {
             background: var(--bg);
             color: var(--text);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-            min-height: 100vh;
-            padding: 1.5rem 1rem 2rem;
+            min-height: 100%;
+            min-height: 100dvh;
+            padding: var(--page-pad-y) var(--page-pad-x) calc(var(--page-pad-y) + var(--safe-bottom));
+            display: flex;
+            flex-direction: column;
         }
 
         .container {
             max-width: 1320px;
             margin: 0 auto;
             width: 100%;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: clamp(0.65rem, 1.5vw, 1.25rem);
         }
 
         h1 {
             text-align: center;
-            font-size: 1.75rem;
+            font-size: clamp(1.25rem, 2.5vw + 0.6rem, 2.2rem);
             font-weight: 700;
-            margin-bottom: 1.5rem;
+            margin: 0;
             background: linear-gradient(135deg, #238636, #58a6ff);
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
-            transition: all 0.3s;
+            flex-shrink: 0;
         }
 
         /* 来源 Tab */
         .source-tabs {
             display: flex;
             flex-wrap: wrap;
-            gap: 0.5rem;
+            gap: clamp(0.3rem, 0.8vw, 0.5rem);
             justify-content: center;
-            padding: 0.75rem;
+            padding: clamp(0.45rem, 1.2vw, 0.75rem);
             background: var(--bg2);
             border: 1px solid var(--border);
             border-radius: 12px;
-            margin-bottom: 1.25rem;
+            flex-shrink: 0;
         }
         .source-tab {
             display: inline-flex;
             align-items: center;
-            gap: 0.4rem;
-            padding: 0.4rem 0.85rem;
+            gap: 0.35rem;
+            padding: clamp(0.28rem, 0.8vw, 0.45rem) clamp(0.55rem, 1.5vw, 0.95rem);
             border-radius: 20px;
             border: 1px solid transparent;
             background: transparent;
             color: var(--muted);
-            font-size: 0.85rem;
+            font-size: clamp(0.75rem, 1.5vw, 0.95rem);
             cursor: pointer;
             transition: all 0.2s;
             white-space: nowrap;
@@ -86,9 +100,9 @@
         }
         .source-tab .count {
             background: var(--bg);
-            padding: 0.1rem 0.45rem;
+            padding: 0.1rem 0.4rem;
             border-radius: 10px;
-            font-size: 0.75rem;
+            font-size: 0.72em;
             color: var(--muted);
         }
         .source-tab.active .count { color: var(--text); }
@@ -97,37 +111,41 @@
         .stats {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: 0.75rem;
-            margin-bottom: 1.25rem;
+            gap: clamp(0.4rem, 1.2vw, 1.25rem);
+            flex-shrink: 0;
         }
         .stat {
             background: var(--bg2);
             border: 1px solid var(--border);
             border-radius: 12px;
-            padding: 1rem 0.75rem;
+            padding: clamp(0.65rem, 1.5vw, 1.3rem) clamp(0.4rem, 1vw, 1rem);
             text-align: center;
             transition: all 0.2s;
+            min-width: 0;
         }
         .stat-val {
-            font-size: 1.6rem;
+            font-size: clamp(1.15rem, 2.5vw + 0.4rem, 2.2rem);
             font-weight: 700;
             line-height: 1.2;
         }
         .stat-lbl {
-            font-size: 0.7rem;
+            font-size: clamp(0.62rem, 1.1vw, 0.8rem);
             color: var(--muted);
             text-transform: uppercase;
             letter-spacing: 0.06em;
-            margin-top: 0.25rem;
+            margin-top: 0.2rem;
         }
 
-        /* 热力图卡片 */
+        /* 热力图卡片：占满剩余空间 */
         .graph-card {
             background: var(--bg2);
             border: 1px solid var(--border);
             border-radius: 16px;
-            padding: 1.25rem;
-            transition: all 0.2s;
+            padding: clamp(0.7rem, 1.8vw, 1.75rem);
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 auto;
+            min-height: 0;
         }
         .graph-header {
             position: relative;
@@ -135,39 +153,40 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1rem;
+            margin-bottom: clamp(0.5rem, 1.2vw, 1rem);
             flex-wrap: wrap;
-            gap: 0.75rem;
+            gap: 0.5rem;
+            flex-shrink: 0;
         }
         .graph-title {
             display: flex;
             align-items: center;
-            gap: 0.6rem;
-            font-size: 1.1rem;
+            gap: 0.5rem;
+            font-size: clamp(0.95rem, 1.8vw, 1.3rem);
             font-weight: 600;
+            flex-wrap: wrap;
         }
         .graph-title .badge {
             display: inline-flex;
             align-items: center;
-            gap: 0.35rem;
-            padding: 0.25rem 0.65rem;
+            gap: 0.3rem;
+            padding: 0.2rem 0.55rem;
             background: var(--bg3);
             border-radius: 16px;
-            font-size: 0.8rem;
+            font-size: 0.8em;
             font-weight: 500;
         }
         .graph-title .badge .dot {
             width: 8px; height: 8px; border-radius: 50%;
         }
 
-        /* 常驻记录按钮 */
         .record-btn {
             background: var(--green);
             color: #fff;
             border: none;
-            padding: 0.35rem 0.95rem;
+            padding: clamp(0.3rem, 0.8vw, 0.45rem) clamp(0.75rem, 1.8vw, 1.1rem);
             border-radius: 16px;
-            font-size: 0.85rem;
+            font-size: clamp(0.8rem, 1.5vw, 0.95rem);
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s;
@@ -189,8 +208,8 @@
             color: var(--text);
             border: 1px solid var(--border);
             border-radius: 8px;
-            padding: 0.4rem 0.65rem;
-            font-size: 0.85rem;
+            padding: 0.35rem 0.55rem;
+            font-size: clamp(0.8rem, 1.4vw, 0.9rem);
             cursor: pointer;
         }
         select:focus { outline: none; border-color: var(--green); }
@@ -199,16 +218,18 @@
             position: relative;
             z-index: 1;
             overflow-x: auto;
-            overflow-y: visible;
+            overflow-y: hidden;
             width: 100%;
             -webkit-overflow-scrolling: touch;
             display: flex;
             justify-content: center;
-            padding-bottom: 4px;
+            align-items: center;
+            flex: 1 1 auto;
+            min-height: 0;
+            padding-bottom: 2px;
         }
         #heatmap {
             min-width: 0;
-            transition: height 0.2s;
             -webkit-transform: translateZ(0);
             transform: translateZ(0);
         }
@@ -216,16 +237,17 @@
         .legend {
             display: flex;
             justify-content: center;
-            gap: 1rem;
-            margin-top: 0.85rem;
-            font-size: 0.75rem;
+            gap: clamp(0.6rem, 1.5vw, 1rem);
+            margin-top: clamp(0.45rem, 1vw, 0.85rem);
+            font-size: clamp(0.68rem, 1.2vw, 0.75rem);
             color: var(--muted);
             flex-wrap: wrap;
+            flex-shrink: 0;
         }
         .legend-item {
             display: flex;
             align-items: center;
-            gap: 0.3rem;
+            gap: 0.28rem;
         }
         .legend-box {
             width: 11px; height: 11px;
@@ -234,9 +256,10 @@
 
         footer {
             text-align: center;
-            margin-top: 1.5rem;
-            font-size: 0.85rem;
+            font-size: clamp(0.8rem, 1.4vw, 0.9rem);
             color: var(--muted);
+            flex-shrink: 0;
+            padding-top: 0.15rem;
         }
         footer a {
             color: #58a6ff;
@@ -253,7 +276,7 @@
             z-index: 1000;
             align-items: center;
             justify-content: center;
-            padding: 16px;
+            padding: max(12px, env(safe-area-inset-top)) 16px max(12px, env(safe-area-inset-bottom));
             backdrop-filter: blur(4px);
         }
         .modal-overlay.show {
@@ -263,9 +286,11 @@
             background: var(--bg2);
             border: 1px solid var(--border);
             border-radius: 16px;
-            padding: 20px;
+            padding: clamp(14px, 3vw, 20px);
             width: 100%;
-            max-width: 420px;
+            max-width: min(420px, 94vw);
+            max-height: min(90dvh, 90vh);
+            overflow-y: auto;
             box-shadow: 0 10px 30px rgba(0,0,0,0.6);
             animation: modalFadeIn 0.2s ease-out;
         }
@@ -297,8 +322,8 @@
         .event-scroll-wrap {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            max-height: 380px;
+            gap: clamp(6px, 1.5vw, 10px);
+            max-height: min(380px, 50dvh);
             overflow-y: auto;
             overflow-x: hidden;
             padding: 6px 2px;
@@ -332,12 +357,12 @@
             transform: translateY(-2px);
         }
         .event-card:active { transform: scale(0.95); }
-        .event-card .emoji { 
-            font-size: 1.6rem; 
+        .event-card .emoji {
+            font-size: clamp(1.25rem, 3vw, 1.6rem);
             line-height: 1;
         }
         .event-card .name {
-            font-size: 0.8rem;
+            font-size: clamp(0.7rem, 1.8vw, 0.8rem);
             font-weight: 500;
             color: var(--text);
             width: 100%;
@@ -381,7 +406,7 @@
             padding: 10px 24px;
             border-radius: 30px;
             position: fixed;
-            bottom: 30px;
+            bottom: calc(24px + var(--safe-bottom));
             left: 50%;
             transform: translateX(-50%);
             z-index: 2000;
@@ -389,40 +414,32 @@
             font-weight: 600;
             box-shadow: 0 4px 16px rgba(0,0,0,0.5);
             transition: opacity 0.3s, visibility 0.3s;
+            max-width: 90vw;
+            text-align: center;
         }
         #toast.show {
             visibility: visible;
             opacity: 1;
         }
 
-        /* 电脑大屏适配 (>=1024px) */
-        @media (min-width: 1024px) {
-            body { padding: 2.5rem 2rem 3rem; }
-            h1 { font-size: 2.2rem; margin-bottom: 2rem; }
-            .stats { gap: 1.25rem; margin-bottom: 1.75rem; }
-            .stat { padding: 1.3rem 1rem; }
-            .stat-val { font-size: 2.2rem; }
-            .stat-lbl { font-size: 0.8rem; }
-            .graph-card { padding: 1.75rem; }
-            .graph-title { font-size: 1.3rem; }
-            .source-tab { padding: 0.5rem 1rem; font-size: 0.95rem; }
-            .record-btn { padding: 0.45rem 1.1rem; font-size: 0.95rem; }
+        /* 窄屏：统计 2 列 */
+        @media (max-width: 640px) {
+            .stats { grid-template-columns: repeat(2, 1fr); }
         }
 
-        /* 手机移动端适配 (<=640px) */
-        @media (max-width: 640px) {
-            body { padding: 0.75rem 0.5rem 1.5rem; }
-            h1 { font-size: 1.35rem; margin-bottom: 1rem; }
-            .stats { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
-            .stat { padding: 0.85rem 0.5rem; }
-            .stat-val { font-size: 1.35rem; }
-            .graph-card { padding: 0.85rem; }
-            .source-tabs { gap: 0.35rem; padding: 0.5rem; }
-            .source-tab { padding: 0.3rem 0.6rem; font-size: 0.78rem; }
-            .custom-modal { padding: 16px; max-width: 92vw; }
-            .event-scroll-wrap { gap: 8px; max-height: 320px; }
-            .event-card .emoji { font-size: 1.3rem; }
-            .event-card .name { font-size: 0.75rem; }
+        /* 极窄屏 */
+        @media (max-width: 380px) {
+            .source-tab { font-size: 0.72rem; padding: 0.25rem 0.45rem; }
+            .graph-title { font-size: 0.9rem; }
+        }
+
+        /* 横屏手机：压缩纵向占用 */
+        @media (max-height: 500px) and (orientation: landscape) {
+            .container { gap: 0.4rem; }
+            .stats { grid-template-columns: repeat(4, 1fr); }
+            .stat { padding: 0.4rem 0.3rem; }
+            .stat-val { font-size: 1.1rem; }
+            h1 { font-size: 1.1rem; }
         }
     </style>
 </head>
@@ -867,24 +884,53 @@ function renderHeatmap() {
 
     const el = document.getElementById('heatmap');
     const wrap = el.parentElement;
-    const isMobile = window.innerWidth < 640;
+    const vw = window.innerWidth || document.documentElement.clientWidth || 800;
+    const vh = window.innerHeight || document.documentElement.clientHeight || 600;
+    const isNarrow = vw < 640;
+    const isTablet = vw >= 640 && vw < 1024;
 
     void wrap.offsetWidth;
-    let avail = wrap.clientWidth || window.innerWidth || 800;
-    if (avail < 100) avail = window.innerWidth || 320;
+    let avail = wrap.clientWidth || vw;
+    if (avail < 80) avail = vw - 24;
 
-    const leftPad = isMobile ? 22 : 42;
-    const rightPad = isMobile ? 4 : 20;
+    // 边距随屏幕缩放，保证热力图尽量一屏完整显示
+    const leftPad = isNarrow ? 18 : (isTablet ? 28 : 42);
+    const rightPad = isNarrow ? 4 : (isTablet ? 12 : 20);
 
+    // 按容器宽度算格子；窄屏允许略小，宽屏有上限避免过大留白
     let cell = Math.floor((avail - leftPad - rightPad) / 53);
-    if (isMobile) {
-        cell = Math.max(9, cell);
+    if (isNarrow) {
+        cell = Math.max(7, Math.min(14, cell));
+    } else if (isTablet) {
+        cell = Math.max(10, Math.min(18, cell));
     } else {
-        cell = Math.max(12, Math.min(24, cell));
+        cell = Math.max(12, Math.min(22, cell));
+    }
+
+    // 根据视口高度限制图表高度，避免页脚被挤出需要滚动
+    const headerBlock = document.querySelector('.graph-header');
+    const legendEl = document.getElementById('legend');
+    const usedOutside =
+        (document.querySelector('h1')?.offsetHeight || 40) +
+        (document.getElementById('sourceTabs')?.offsetHeight || 48) +
+        (document.querySelector('.stats')?.offsetHeight || 80) +
+        (headerBlock?.offsetHeight || 40) +
+        (legendEl?.offsetHeight || 28) +
+        (document.querySelector('footer')?.offsetHeight || 28) +
+        80; // 内外边距余量
+
+    const maxGraphH = Math.max(110, Math.min(vh - usedOutside, isNarrow ? 160 : (isTablet ? 200 : 240)));
+    let graphH = Math.round(cell * 7 + (isNarrow ? 36 : 48));
+    if (graphH > maxGraphH) {
+        // 高度不够时优先压高度，必要时再略缩小 cell
+        graphH = maxGraphH;
+        const cellByH = Math.floor((graphH - (isNarrow ? 36 : 48)) / 7);
+        if (cellByH > 0 && cellByH < cell) {
+            cell = Math.max(isNarrow ? 7 : 10, cellByH);
+        }
     }
 
     const graphW = 53 * cell + leftPad + rightPad;
-    const graphH = Math.max(isMobile ? 130 : 170, cell * 8.5 + (isMobile ? 30 : 45));
 
     el.style.width = graphW + 'px';
     el.style.height = graphH + 'px';
@@ -904,6 +950,9 @@ function renderHeatmap() {
         } else {
             chart.resize({ width: graphW, height: graphH });
         }
+
+        const labelSize = Math.max(9, Math.min(13, Math.floor(cell * 0.7)));
+        const monthSize = Math.max(10, Math.min(13, Math.floor(cell * 0.75)));
 
         chart.setOption({
             backgroundColor: 'transparent',
@@ -936,7 +985,7 @@ function renderHeatmap() {
                 }
             },
             calendar: {
-                top: isMobile ? 20 : Math.max(26, cell * 1.5),
+                top: isNarrow ? 16 : Math.max(22, cell * 1.2),
                 left: leftPad,
                 right: rightPad,
                 cellSize: [cell, cell],
@@ -948,11 +997,11 @@ function renderHeatmap() {
                     color: '#8b949e',
                     firstDay: 1,
                     nameMap: ['7', '1', '2', '3', '4', '5', '6'],
-                    fontSize: Math.max(10, Math.floor(cell * 0.7))
+                    fontSize: labelSize
                 },
                 monthLabel: {
                     color: '#8b949e',
-                    fontSize: Math.max(11, Math.floor(cell * 0.75))
+                    fontSize: monthSize
                 }
             },
             series: {
@@ -1006,6 +1055,11 @@ window.addEventListener('resize', () => {
     window.__rz = setTimeout(() => {
         if (allData) renderHeatmap();
     }, 200);
+});
+
+// 方向变化时重新布局
+window.addEventListener('orientationchange', () => {
+    setTimeout(() => { if (allData) renderHeatmap(); }, 300);
 });
 
 init();
