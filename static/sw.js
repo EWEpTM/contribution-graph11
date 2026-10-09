@@ -1,6 +1,6 @@
 /* Keep PWA Service Worker */
-const CACHE_STATIC = 'keep-static-v29';
-const CACHE_RUNTIME = 'keep-runtime-v29';
+const CACHE_STATIC = 'keep-static';
+const CACHE_RUNTIME = 'keep-runtime';
 
 const PRECACHE_URLS = [
   '/',
@@ -108,3 +108,4 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(staleWhileRevalidate(request));
   }
 });
+//（注：内容由AI生成）

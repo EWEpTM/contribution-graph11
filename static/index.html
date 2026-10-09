@@ -1416,8 +1416,8 @@ function renderHeatmap() {
     });
 
     const legendColor = isCombined ? { rgb: '35,134,54', hex: '#238636' } : getColor(currentSource);
-    // 总计模式亮度档位为 0/3/6/9/12，图例同步显示；普通/热度模式显示 无/少/中/较多/多
-    const lv = (isCombined && combineMode === 'stack') ? ['0', '1-5', '6-10', '11-15', '16+'] : ['无', '少', '中', '较多', '多'];
+    // 图例统一显示 无/少/中/较多/多
+    const lv = ['无', '少', '中', '较多', '多'];
     document.getElementById('legend').innerHTML = `
         <div class="legend-item"><div class="legend-box" style="background:${cCell}"></div>${lv[0]}</div>
         <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.35)"></div>${lv[1]}</div>
@@ -1594,4 +1594,3 @@ init();
 </script>
 </body>
 </html>
-<!-- （注：内容由AI生成） -->
