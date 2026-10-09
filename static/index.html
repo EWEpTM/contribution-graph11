@@ -1535,7 +1535,7 @@ function renderHeatmap() {
                 itemStyle: { color: cCell, borderColor: cCellBorder, borderWidth: 1 },
                 splitLine: { show: false },
                 yearLabel: { show: false },
-                dayLabel: { show: false },  // 一/三/五 改由外部常驻星期列显示（不随滚动）
+                dayLabel: { show: false, firstDay: 1 },  // 一周从周一开始（1=周一，"一"在最顶行）；一/三/五 由外部常驻星期列显示
                 monthLabel: { show: false }  // 月份标签改用 HTML 覆盖层（可在边缘被切时隐藏）
             },
             series: { type: 'heatmap', coordinateSystem: 'calendar', data: chartData }
@@ -1594,3 +1594,4 @@ init();
 </script>
 </body>
 </html>
+<!-- （注：内容由AI生成） -->
