@@ -93,6 +93,8 @@
             display: flex;
             flex-direction: column;
             gap: clamp(0.65rem, 1.5vw, 1.25rem);
+            opacity: 0;               /* 数据未就绪前整体透明，避免 F5 后数字/标签/热力图逐个闪现 */
+            transition: opacity 0.18s ease-out;
         }
         h1 {
             text-align: center;
@@ -956,8 +958,11 @@ async function doLogout(e) {
 }
 
 async function init() {
-    await loadMe();
-    await loadSourceColorsFromDB();
+    // 四个数据请求互相独立，并行发出（替代原来串行 await，省掉 3 个网络往返）
+    const pMe = loadMe();
+    const pSrc = loadSourceColorsFromDB();
+    const pStats = loadStats();
+    const pData = loadData();
     const yearSel = document.getElementById('year');
     const cy = new Date().getFullYear();
     yearSel.innerHTML = '';
@@ -998,9 +1003,10 @@ async function init() {
     else if (mq && mq.addListener) mq.addListener(onSysChange);
     updateThemeMenu();
 
-    await loadStats();
-    await loadData();
+    await Promise.all([pMe, pSrc, pStats, pData]);
     render();
+    // 数据与首帧画布就绪后再淡入，避免 F5 后"空状态→真实数据"逐个闪现/高度跳变
+    requestAnimationFrame(() => { document.querySelector('.container').style.opacity = 1; });
 
     // 热力图横向滚动：进度条同步 + 拖拽/点击 + 滚轮横向
     const heatWrap = document.querySelector('.heatmap-wrap');
@@ -1540,8 +1546,9 @@ function renderHeatmap() {
             },
             series: { type: 'heatmap', coordinateSystem: 'calendar', data: chartData }
         }, true);
+        // setOption 同步完成布局后，只做需要像素坐标的标签定位/滚动居中；
+        // 不再二次 chart.resize（尺寸与 init 时一致，多余 resize 会触发首帧高度抖动）。
         requestAnimationFrame(() => {
-            if (chart && !chart.isDisposed()) chart.resize({ width: graphW, height: graphH });
             syncScrollbar();
             layoutMonthLabels();
             layoutWeekLabels();
@@ -1550,7 +1557,7 @@ function renderHeatmap() {
             }
         });
     };
-    requestAnimationFrame(draw);
+    draw();
 }
 
 function getCombinedColor(stats) {
