@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ocg-db
+    restart: unless-stopped
+    ports:
+      # 仅本机可访问的管理端口（psql -h 127.0.0.1 -p 5433 -U ocg -d ocg）
+      - "127.0.0.1:5433:5432"
+    environment:
+      - POSTGRES_USER=ocg
+      - POSTGRES_PASSWORD=ocg
+      - POSTGRES_DB=ocg
+      - TZ=Asia/Shanghai
+      # 数据库会话时区与业务时区保持一致（应用层仍以无时区 timestamp 存上海墙上时间）
+      - PGTZ=Asia/Shanghai
+    volumes:
+      - /home/gavin/ocg/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ocg -d ocg"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  contribution-graph:
+    build: .
+    container_name: ocg
+    ports:
+      - "127.0.0.1:9999:8080"
+    volumes:
+      - /home/gavin/ocg/data:/app/data
+    environment:
+      - TZ=Asia/Shanghai
+      - AUTH_USERNAME=ze
+      - AUTH_PASSWORD=@zjjilove211
+      - DATABASE_URL=postgres://ocg:ocg@postgres:5432/ocg?sslmode=disable&TimeZone=Asia/Shanghai
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/api/health" ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s

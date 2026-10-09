@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0d1117">
+    <title>Keep - 用户管理</title>
+    <script>
+    // 主题初始化：与主页面同步（localStorage keep_theme），避免闪烁
+    (function () {
+        var p = localStorage.getItem('keep_theme') || 'system';
+        var eff = p;
+        if (p === 'system') {
+            eff = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+        }
+        document.documentElement.dataset.theme = eff;
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.setAttribute('content', eff === 'dark' ? '#0d1117' : '#ffffff');
+    })();
+    </script>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --bg2: #161b22;
+            --bg3: #21262d;
+            --text: #e6edf3;
+            --muted: #8b949e;
+            --border: #30363d;
+            --green: #238636;
+            --danger: #f85149;
+            --accent: #58a6ff;
+        }
+        html[data-theme="light"] {
+            --bg: #ffffff;
+            --bg2: #f6f8fa;
+            --bg3: #eaeef2;
+            --text: #1f2328;
+            --muted: #656d76;
+            --border: #d0d7de;
+            --green: #1a7f37;
+            --danger: #cf222e;
+            --accent: #0969da;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            min-height: 100vh;
+            padding: 1.5rem 1rem;
+        }
+        .card {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 1.5rem 1.25rem;
+        }
+        .top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.25rem;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        h1 {
+            font-size: 1.35rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--green), var(--accent));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { color: var(--text); }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        th, td {
+            text-align: left;
+            padding: 0.65rem 0.5rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+        th {
+            color: var(--muted);
+            font-weight: 600;
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .badge {
+            display: inline-block;
+            padding: 0.15rem 0.55rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-admin { background: rgba(88,166,255,0.15); color: var(--accent); }
+        .badge-user { background: var(--bg3); color: var(--muted); }
+        .btn-del {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            border-radius: 8px;
+            padding: 0.3rem 0.9rem;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-del:hover { color: var(--danger); border-color: var(--danger); background: rgba(248,81,73,0.1); }
+        .btn-del.confirming {
+            color: #fff;
+            border-color: var(--danger);
+            background: var(--danger);
+        }
+        .msg {
+            text-align: center;
+            color: var(--muted);
+            padding: 2rem 0;
+            font-size: 0.9rem;
+        }
+        .num { font-variant-numeric: tabular-nums; }
+        .reg-opt {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.7rem 1rem;
+            background: var(--bg3);
+            border-radius: 10px;
+            margin-bottom: 1.1rem;
+            flex-wrap: wrap;
+        }
+        .reg-opt-label {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            user-select: none;
+        }
+        .switch {
+            position: relative;
+            width: 40px;
+            height: 22px;
+            flex-shrink: 0;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+            position: absolute;
+        }
+        .slider {
+            position: absolute;
+            inset: 0;
+            background: var(--border);
+            border-radius: 22px;
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+        .slider::before {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            left: 3px;
+            top: 3px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.2s;
+        }
+        .switch input:checked + .slider { background: var(--green); }
+        .switch input:checked + .slider::before { transform: translateX(18px); }
+        .reg-hint {
+            font-size: 0.78rem;
+            color: var(--muted);
+        }
+        @media (max-width: 560px) {
+            .hide-sm { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="top">
+            <h1>👥 用户管理</h1>
+            <a href="/">← 返回主页</a>
+        </div>
+        <div class="reg-opt">
+            <label class="reg-opt-label">
+                <span class="switch"><input type="checkbox" id="allowReg"><span class="slider"></span></span>
+                允许注册
+            </label>
+            <span class="reg-hint">开启后登录页才可注册新用户；关闭时注册显示"未开放"</span>
+        </div>
+        <div id="listWrap" class="msg">加载中...</div>
+    </div>
+
+    <script>
+        let users = [];
+        let me = null;
+
+        async function loadUsers() {
+            const wrap = document.getElementById('listWrap');
+            try {
+                const res = await fetch('/api/users');
+                if (res.status === 401) { window.location.href = '/login.html'; return; }
+                if (res.status === 403) { wrap.textContent = '无权限访问该页面'; return; }
+                if (!res.ok) { wrap.textContent = '加载失败，请重试'; return; }
+                users = await res.json() || [];
+                const meRes = await fetch('/api/me');
+                me = meRes.ok ? await meRes.json() : null;
+                render();
+            } catch (e) {
+                wrap.textContent = '网络请求失败';
+            }
+        }
+
+        function render() {
+            const wrap = document.getElementById('listWrap');
+            if (!users.length) {
+                wrap.innerHTML = '暂无用户';
+                return;
+            }
+            let html = '<table><thead><tr>' +
+                '<th>ID</th><th>账号</th><th>角色</th>' +
+                '<th class="hide-sm">注册时间</th>' +
+                '<th>打卡数</th><th></th></tr></thead><tbody>';
+            users.forEach(u => {
+                const roleBadge = u.role === 'admin'
+                    ? '<span class="badge badge-admin">管理员</span>'
+                    : '<span class="badge badge-user">普通用户</span>';
+                const isSelf = me && me.username === u.username;
+                let delBtn = '';
+                if (u.role === 'user') {
+                    delBtn = '<button class="btn-del" id="del-' + u.id + '" onclick="onDelete(' + u.id + ')">删除</button>';
+                }
+                html += '<tr>' +
+                    '<td class="num">' + u.id + '</td>' +
+                    '<td>' + esc(u.username) + (isSelf ? ' <span style="opacity:.6">(我)</span>' : '') + '</td>' +
+                    '<td>' + roleBadge + '</td>' +
+                    '<td class="hide-sm">' + esc(String(u.created_at || '').slice(0, 10)) + '</td>' +
+                    '<td class="num">' + u.count + '</td>' +
+                    '<td>' + delBtn + '</td></tr>';
+            });
+            html += '</tbody></table>';
+            wrap.innerHTML = html;
+        }
+
+        function esc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+            });
+        }
+
+        let confirmTimer = null;
+
+        function onDelete(id) {
+            const btn = document.getElementById('del-' + id);
+            if (!btn) return;
+            if (btn.classList.contains('confirming')) {
+                doDelete(id, btn);
+                return;
+            }
+            // 两步确认：第一次点击变红色"确认删除？"，3 秒内再次点击才执行
+            btn.classList.add('confirming');
+            btn.textContent = '确认删除?';
+            clearTimeout(confirmTimer);
+            confirmTimer = setTimeout(() => {
+                const b = document.getElementById('del-' + id);
+                if (b) { b.classList.remove('confirming'); b.textContent = '删除'; }
+            }, 3000);
+        }
+
+        async function doDelete(id, btn) {
+            btn.disabled = true;
+            btn.textContent = '删除中...';
+            try {
+                const res = await fetch('/api/users?id=' + encodeURIComponent(id), { method: 'DELETE' });
+                if (res.status === 401) { window.location.href = '/login.html'; return; }
+                if (res.status === 403) { alert('无权限'); }
+                const data = await res.json().catch(() => ({}));
+                if (res.ok) {
+                    users = users.filter(u => u.id !== id);
+                    render();
+                } else {
+                    alert(data.error || '删除失败');
+                    const b = document.getElementById('del-' + id);
+                    if (b) { b.classList.remove('confirming'); b.textContent = '删除'; btn.disabled = false; }
+                }
+            } catch (e) {
+                alert('网络请求失败');
+                const b = document.getElementById('del-' + id);
+                if (b) { b.classList.remove('confirming'); b.textContent = '删除'; btn.disabled = false; }
+            }
+        }
+
+        let allowRegister = false;
+
+        async function loadConfig() {
+            try {
+                const res = await fetch('/api/config');
+                if (res.status === 401) { window.location.href = '/login.html'; return; }
+                if (res.ok) {
+                    const d = await res.json();
+                    allowRegister = !!d.allow_register;
+                }
+                document.getElementById('allowReg').checked = allowRegister;
+            } catch (e) { /* 请求失败保持当前状态 */ }
+        }
+
+        document.getElementById('allowReg').addEventListener('change', async function () {
+            const v = this.checked;
+            this.disabled = true;
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ allow_register: v })
+                });
+                if (res.status === 401) { window.location.href = '/login.html'; return; }
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) {
+                    alert(data.error || '保存失败');
+                    this.checked = !v;
+                } else {
+                    allowRegister = !!data.allow_register;
+                }
+            } catch (e) {
+                alert('网络请求失败');
+                this.checked = !v;
+            } finally {
+                this.disabled = false;
+            }
+        });
+
+        loadUsers();
+        loadConfig();
+    </script>
+    <script>
+    // 主题全局同步：主页面切换后本页实时跟随；系统模式跟随系统变化
+    (function () {
+        function applyFromStorage() {
+            var p = localStorage.getItem('keep_theme') || 'system';
+            var eff = p;
+            if (p === 'system') {
+                eff = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+            }
+            document.documentElement.dataset.theme = eff;
+            var m = document.querySelector('meta[name="theme-color"]');
+            if (m) m.setAttribute('content', eff === 'dark' ? '#0d1117' : '#ffffff');
+        }
+        window.addEventListener('storage', function (e) {
+            if (e.key === 'keep_theme') applyFromStorage();
+        });
+        var mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+        if (mq && mq.addEventListener) {
+            mq.addEventListener('change', function () {
+                if ((localStorage.getItem('keep_theme') || 'system') === 'system') applyFromStorage();
+            });
+        }
+    })();
+    </script>
+</body>
+</html>
