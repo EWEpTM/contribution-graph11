@@ -119,25 +119,28 @@
         }
         .ev-line {
             display: flex;
-            align-items: baseline;
+            align-items: center;
             gap: 8px;
-            margin-bottom: 5px;
             font-size: 0.9rem;
-            flex-wrap: wrap;
+            min-width: 0;
         }
-        .ev-row.side-normal .ev-line { justify-content: flex-start; }
-        .ev-row.side-low .ev-line { justify-content: flex-end; text-align: right; }
         .ev-count {
             font-weight: 700;
             font-size: 0.95rem;
-            min-width: 34px;
+            min-width: 30px;
+            text-align: left;
+            flex-shrink: 0;
         }
         .ev-name {
             color: var(--text);
             word-break: break-all;
+            flex: 0 1 auto;
+            min-width: 0;
         }
         .ev-bar {
-            height: 10px;
+            flex: 1 1 44px;
+            min-width: 44px;
+            height: 12px;
             background: var(--bg3);
             border-radius: 6px;
             overflow: hidden;
@@ -226,24 +229,24 @@
         renderList('listLow', low, 'low');
     }
 
-    function renderList(elId, rows, side) {
+    function renderList(elId, rows) {
         const el = document.getElementById(elId);
         if (!el) return;
         if (!rows.length) {
             el.innerHTML = '<div class="empty">今年暂无记录</div>';
             return;
         }
-        // 第一名柱长 = 面板宽度的一半（50%），其余按次数占比缩放
+        // 第一名光柱占满名称右侧的光柱区域，其余按次数占比缩放；颜色 = 事件设定的颜色（完全同色）
         const max = rows[0].count;
         el.innerHTML = rows.map(function (r) {
-            const pct = (r.count / max * 50).toFixed(1);
-            const color = 'rgba(' + (r.color || '139,148,158') + ',0.85)';
+            const pct = (r.count / max * 100).toFixed(1);
+            const color = 'rgb(' + (r.color || '139,148,158') + ')';
             const nameHtml = '<span class="ev-name">' + escapeHtml(r.emoji ? r.emoji + ' ' : '') + escapeHtml(r.name) + '</span>';
             const countHtml = '<span class="ev-count">' + r.count + '</span>';
-            const line = side === 'normal' ? countHtml + nameHtml : nameHtml + countHtml;
-            return '<div class="ev-row side-' + side + '">' +
-                '<div class="ev-line">' + line + '</div>' +
+            return '<div class="ev-row">' +
+                '<div class="ev-line">' + countHtml + nameHtml +
                 '<div class="ev-bar"><div class="ev-fill" style="width:' + pct + '%;background:' + color + '"></div></div>' +
+                '</div>' +
                 '</div>';
         }).join('');
     }
