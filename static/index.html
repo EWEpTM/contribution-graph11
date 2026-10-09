@@ -1220,12 +1220,22 @@ let detailDate = null;
 let detailRecords = [];
 let pendingDeleteId = null;
 
+let lastTapDate = null;
 function onHeatmapClick(params) {
-    // 仅在具体事件视图下生效，全部视图点击不弹窗
-    if (currentSource === 'combined') return;
     if (!params || !params.data || !params.data.value) return;
     const date = params.data.value[0];
     if (!date) return;
+    // 点新格子：显示 tooltip（触摸端当作 hover 用）
+    if (lastTapDate !== date) {
+        lastTapDate = date;
+        if (chart && !chart.isDisposed()) {
+            chart.dispatchAction({ type: 'showTip', seriesIndex: params.seriesIndex, dataIndex: params.dataIndex });
+        }
+        return;
+    }
+    // 再点同一格：进详情（combined 视图无详情可看）
+    lastTapDate = null;
+    if (currentSource === 'combined') return;
     const recs = (allData || []).filter(function (c) {
         return c.source === currentSource &&
             (c.local_date || (c.timestamp || '').slice(0, 10)) === date;
@@ -1528,7 +1538,7 @@ function renderHeatmap() {
             backgroundColor: 'transparent',
             animation: false,
             tooltip: {
-                show: !isTouchDevice(),  // 触控端不显示 tooltip（点击格子直接弹详情），仅 PC 悬停
+                show: true,
                 appendToBody: true,
                 confine: true,  // 靠近视口边缘时自动翻转/收拢，避免 tooltip 被截断
                 triggerOn: 'mousemove',
