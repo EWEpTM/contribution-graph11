@@ -17,7 +17,7 @@ import (
     "time"
     "unicode/utf8"
 
-    _ "modernc.org/sqlite"
+    _ "github.com/jackc/pgx/v5/stdlib"
 )
 
 // Contribution represents the unified event structure
@@ -121,27 +121,25 @@ func main() {
     initLocation()
     initAuth()
 
-    dbPath := os.Getenv("DB_PATH")
-    if dbPath == "" {
-        dbPath = "./data/contributions.db"
-    }
-
-    if err := os.MkdirAll("./data", 0755); err != nil {
-        log.Fatalf("Failed to create data directory: %v", err)
+    dbURL := os.Getenv("DATABASE_URL")
+    if dbURL == "" {
+        log.Fatal("DATABASE_URL not set (e.g. postgres://user:pass@host:5432/db?sslmode=disable&TimeZone=Asia/Shanghai)")
     }
 
     var err error
-    db, err = sql.Open("sqlite", dbPath)
+    db, err = sql.Open("pgx", dbURL)
     if err != nil {
         log.Fatal(err)
     }
     defer db.Close()
 
-    if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-        log.Printf("⚠️  Failed to set WAL mode: %v", err)
-    }
-    if _, err := db.Exec("PRAGMA busy_timeout=5000;"); err != nil {
-        log.Printf("⚠️  Failed to set busy_timeout: %v", err)
+    // PostgreSQL 连接池（SQLite 单文件时代无此概念）
+    db.SetMaxOpenConns(10)
+    db.SetMaxIdleConns(5)
+    db.SetConnMaxLifetime(30 * time.Minute)
+
+    if err := db.Ping(); err != nil {
+        log.Fatalf("Cannot connect to PostgreSQL: %v", err)
     }
 
     ensureSchema()
@@ -191,15 +189,18 @@ func main() {
 }
 
 func ensureSchema() {
+    // PostgreSQL 方言建表。
+    // 时区策略：事件时间用 TIMESTAMP（无时区）存"上海墙上时间"（与旧 SQLite 的本地时间字符串语义一致），
+    // 由应用层 appLocation 统一处理时区，避免 timestamptz 在 date() 查询时按连接时区偏移一天。
     createTableSQL := `
     CREATE TABLE IF NOT EXISTS events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id BIGSERIAL PRIMARY KEY,
         source TEXT NOT NULL,
         context TEXT,
-        timestamp DATETIME NOT NULL,
+        timestamp TIMESTAMP NOT NULL,
         metadata TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        user_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        user_id BIGINT,
         UNIQUE(source, context, timestamp, user_id)
     );
     CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
@@ -207,11 +208,11 @@ func ensureSchema() {
     CREATE INDEX IF NOT EXISTS idx_events_user ON events(user_id);
 
     CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id BIGSERIAL PRIMARY KEY,
         username TEXT NOT NULL UNIQUE,
         password_hash TEXT NOT NULL,
         role TEXT NOT NULL DEFAULT 'user',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS sources_config (
@@ -220,7 +221,8 @@ func ensureSchema() {
         emoji TEXT NOT NULL,
         color TEXT NOT NULL,
         is_low_freq INTEGER DEFAULT 0,
-        sort_order INTEGER DEFAULT 0
+        sort_order INTEGER DEFAULT 0,
+        user_id BIGINT
     );
 
     CREATE TABLE IF NOT EXISTS app_config (
@@ -229,75 +231,44 @@ func ensureSchema() {
     );
     `
 
-    // 旧库升级：events 表缺 user_id 列时重建（搬迁数据 + 唯一约束纳入 user_id）
-    var tblName string
-    err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='events'").Scan(&tblName)
-    hasOldEvents := err == nil
-    if hasOldEvents {
-        rows, qerr := db.Query("PRAGMA table_info(events)")
-        hasUserCol := false
-        if qerr == nil {
-            for rows.Next() {
-                var cid int
-                var name, ctype string
-                var notnull, pk int
-                var dflt interface{}
-                rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk)
-                if name == "user_id" {
-                    hasUserCol = true
-                }
-            }
-            rows.Close()
-        }
-        if !hasUserCol {
-            log.Printf("🛠️  Migrating events table: adding user_id column (rebuild)")
-            db.Exec("ALTER TABLE events RENAME TO events_old")
-            if _, err := db.Exec(createTableSQL); err != nil {
-                log.Fatalf("Failed to recreate events table: %v", err)
-            }
-            db.Exec(`
-                INSERT INTO events (id, source, context, timestamp, metadata, created_at, user_id)
-                SELECT id, source, context, timestamp, metadata, created_at, NULL FROM events_old
-            `)
-            db.Exec("DROP TABLE events_old")
-        }
-    } else {
-        if _, err := db.Exec(createTableSQL); err != nil {
-            log.Fatalf("Failed to create table: %v", err)
-        }
+    // PostgreSQL 全新库直接建表（IF NOT EXISTS 幂等）
+    if _, err := db.Exec(createTableSQL); err != nil {
+        log.Fatalf("Failed to create table: %v", err)
     }
 
-    // 旧库自动补字段
-    db.Exec("ALTER TABLE sources_config ADD COLUMN is_low_freq INTEGER DEFAULT 0")
-    db.Exec("ALTER TABLE sources_config ADD COLUMN sort_order INTEGER DEFAULT 0")
-    db.Exec("ALTER TABLE sources_config ADD COLUMN user_id INTEGER")
+    // 幂等补字段（PG 原生支持 ADD COLUMN IF NOT EXISTS；列已存在则无操作）
+    db.Exec("ALTER TABLE sources_config ADD COLUMN IF NOT EXISTS is_low_freq INTEGER DEFAULT 0")
+    db.Exec("ALTER TABLE sources_config ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0")
+    db.Exec("ALTER TABLE sources_config ADD COLUMN IF NOT EXISTS user_id BIGINT")
 
     // 确保管理员账号存在（docker 环境变量创建的用户默认为管理员）
     var uid int64
-    err = db.QueryRow("SELECT id FROM users WHERE username = ?", authUsername).Scan(&uid)
+    var err error
+    err = db.QueryRow("SELECT id FROM users WHERE username = $1", authUsername).Scan(&uid)
     if err != nil {
         seedPwd := authPassword
         if seedPwd == "" {
             seedPwd = "admin" // 单用户模式默认种子，不参与登录校验
         }
-        res, ierr := db.Exec(`
+        // PostgreSQL 取插入 ID 用 RETURNING（database/sql 的 LastInsertId 不受支持）
+        err = db.QueryRow(`
             INSERT INTO users (username, password_hash, role)
-            VALUES (?, ?, 'admin')
-        `, authUsername, hashPassword(authUsername, seedPwd))
-        if ierr != nil {
-            log.Fatalf("Failed to seed admin user: %v", ierr)
+            VALUES ($1, $2, 'admin')
+            RETURNING id
+        `, authUsername, hashPassword(authUsername, seedPwd)).Scan(&uid)
+        if err != nil {
+            log.Fatalf("Failed to seed admin user: %v", err)
         }
-        uid, _ = res.LastInsertId()
         log.Printf("👑 Seeded admin user: %s", authUsername)
     }
     adminUserID = uid
 
     // 迁移：历史打卡数据归属管理员
-    if _, err := db.Exec("UPDATE events SET user_id = ? WHERE user_id IS NULL", uid); err != nil {
+    if _, err := db.Exec("UPDATE events SET user_id = $1 WHERE user_id IS NULL", uid); err != nil {
         log.Printf("⚠️  Failed to backfill user_id: %v", err)
     }
     // 迁移：历史事件类型归属管理员（事件类型按用户隔离，普通用户可自建自己的事件）
-    if _, err := db.Exec("UPDATE sources_config SET user_id = ? WHERE user_id IS NULL", uid); err != nil {
+    if _, err := db.Exec("UPDATE sources_config SET user_id = $1 WHERE user_id IS NULL", uid); err != nil {
         log.Printf("⚠️  Failed to backfill sources_config.user_id: %v", err)
     }
 }
@@ -451,7 +422,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
     username := strings.TrimSpace(req.Username)
     var id int64
     var role, hash string
-    err := db.QueryRow(`SELECT id, role, password_hash FROM users WHERE username = ?`, username).Scan(&id, &role, &hash)
+    err := db.QueryRow(`SELECT id, role, password_hash FROM users WHERE username = $1`, username).Scan(&id, &role, &hash)
     if err != nil || hashPassword(username, req.Password) != hash {
         writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "账号或密码错误"})
         return
@@ -516,21 +487,23 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
     }
 
     var exists string
-    err := db.QueryRow(`SELECT username FROM users WHERE username = ?`, username).Scan(&exists)
+    err := db.QueryRow(`SELECT username FROM users WHERE username = $1`, username).Scan(&exists)
     if err == nil {
         writeJSON(w, http.StatusBadRequest, map[string]string{"error": "用户名已存在"})
         return
     }
 
-    res, err := db.Exec(`
+    var newID int64
+    err = db.QueryRow(`
         INSERT INTO users (username, password_hash, role)
-        VALUES (?, ?, 'user')
-    `, username, hashPassword(username, req.Password))
+        VALUES ($1, $2, 'user')
+        RETURNING id
+    `, username, hashPassword(username, req.Password)).Scan(&newID)
     if err != nil {
         writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "注册失败，请稍后重试"})
         return
     }
-    id, _ := res.LastInsertId()
+    id := newID
 
     // 注册后自动登录
     token := randomToken()
@@ -564,7 +537,8 @@ func handleUsers(w http.ResponseWriter, r *http.Request) {
     switch r.Method {
     case http.MethodGet:
         rows, err := db.Query(`
-            SELECT u.id, u.username, u.role, u.created_at,
+            SELECT u.id, u.username, u.role,
+                   to_char(u.created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at,
                    (SELECT COUNT(*) FROM events e WHERE e.user_id = u.id) AS cnt
             FROM users u
             ORDER BY u.role DESC, u.id ASC
@@ -606,7 +580,7 @@ func handleUsers(w http.ResponseWriter, r *http.Request) {
         }
 
         var role string
-        err = db.QueryRow(`SELECT role FROM users WHERE id = ?`, id).Scan(&role)
+        err = db.QueryRow(`SELECT role FROM users WHERE id = $1`, id).Scan(&role)
         if err != nil {
             writeJSON(w, http.StatusNotFound, map[string]string{"error": "用户不存在"})
             return
@@ -621,8 +595,8 @@ func handleUsers(w http.ResponseWriter, r *http.Request) {
             http.Error(w, "Database error", http.StatusInternalServerError)
             return
         }
-        resE, errE := tx.Exec(`DELETE FROM events WHERE user_id = ?`, id)
-        _, errU := tx.Exec(`DELETE FROM users WHERE id = ?`, id)
+        resE, errE := tx.Exec(`DELETE FROM events WHERE user_id = $1`, id)
+        _, errU := tx.Exec(`DELETE FROM users WHERE id = $1`, id)
         if errE != nil || errU != nil {
             tx.Rollback()
             http.Error(w, "Database error", http.StatusInternalServerError)
@@ -677,8 +651,9 @@ func handlePostContribution(w http.ResponseWriter, r *http.Request) {
     }
 
     stmt, err := tx.Prepare(`
-        INSERT OR IGNORE INTO events (source, context, timestamp, metadata, user_id)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO events (source, context, timestamp, metadata, user_id)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT DO NOTHING
     `)
     if err != nil {
         tx.Rollback()
@@ -729,7 +704,7 @@ func handleDeleteContribution(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    res, err := db.Exec(`DELETE FROM events WHERE id = ? AND user_id = ?`, id, su.ID)
+    res, err := db.Exec(`DELETE FROM events WHERE id = $1 AND user_id = $2`, id, su.ID)
     if err != nil {
         http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
         return
@@ -764,12 +739,12 @@ func handleGetContributions(w http.ResponseWriter, r *http.Request) {
     query := `
         SELECT id, source, context, timestamp, metadata
         FROM events
-        WHERE timestamp >= ? AND timestamp < ? AND user_id = ?
+        WHERE timestamp >= $1 AND timestamp < $2 AND user_id = $3
     `
     args := []interface{}{startDate, endDate, su.ID}
 
     if source != "" {
-        query += " AND source = ?"
+        query += " AND source = $4"
         args = append(args, source)
     }
     query += " ORDER BY timestamp DESC"
@@ -813,13 +788,13 @@ func handleGetStats(w http.ResponseWriter, r *http.Request) {
     stats := make(map[string]interface{})
 
     var total int
-    db.QueryRow("SELECT COUNT(*) FROM events WHERE user_id = ?", su.ID).Scan(&total)
+    db.QueryRow("SELECT COUNT(*) FROM events WHERE user_id = $1", su.ID).Scan(&total)
     stats["total"] = total
 
     rows, err := db.Query(`
         SELECT source, COUNT(*) as count
         FROM events
-        WHERE user_id = ?
+        WHERE user_id = $1
         GROUP BY source
         ORDER BY count DESC
     `, su.ID)
@@ -841,7 +816,7 @@ func handleGetStats(w http.ResponseWriter, r *http.Request) {
     var today int
     db.QueryRow(`
         SELECT COUNT(*) FROM events
-        WHERE date(timestamp) = ? AND user_id = ?
+        WHERE to_char(timestamp, 'YYYY-MM-DD') = $1 AND user_id = $2
     `, todayStr, su.ID).Scan(&today)
     stats["today"] = today
     stats["timezone"] = appLocation.String()
@@ -864,7 +839,7 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
         rows, err := db.Query(`
             SELECT id, name, emoji, color, is_low_freq, COALESCE(sort_order, 0)
             FROM sources_config
-            WHERE user_id = ?
+            WHERE user_id = $1
             ORDER BY sort_order ASC, name ASC
         `, su.ID)
         if err != nil {
@@ -923,25 +898,25 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
         // 新建时若未指定 sort_order，在本用户内排到末尾
         if c.SortOrder == 0 {
             var maxOrder sql.NullInt64
-            _ = db.QueryRow("SELECT MAX(sort_order) FROM sources_config WHERE user_id = ?", su.ID).Scan(&maxOrder)
+            _ = db.QueryRow("SELECT MAX(sort_order) FROM sources_config WHERE user_id = $1", su.ID).Scan(&maxOrder)
             if maxOrder.Valid {
                 c.SortOrder = int(maxOrder.Int64) + 1
             }
             var existingOrder sql.NullInt64
-            errExist := db.QueryRow("SELECT sort_order FROM sources_config WHERE id = ? AND user_id = ?", c.ID, su.ID).Scan(&existingOrder)
+            errExist := db.QueryRow("SELECT sort_order FROM sources_config WHERE id = $1 AND user_id = $2", c.ID, su.ID).Scan(&existingOrder)
             if errExist == nil && existingOrder.Valid {
                 // 更新时不因默认 0 覆盖；仅当客户端传来非 0 才用新值
             }
         }
 
         var existingID string
-        errExist := db.QueryRow("SELECT id FROM sources_config WHERE id = ? AND user_id = ?", c.ID, su.ID).Scan(&existingID)
+        errExist := db.QueryRow("SELECT id FROM sources_config WHERE id = $1 AND user_id = $2", c.ID, su.ID).Scan(&existingID)
         if errExist == nil {
             // 更新（仅限本人）
             _, err := db.Exec(`
                 UPDATE sources_config
-                SET name = ?, emoji = ?, color = ?, is_low_freq = ?
-                WHERE id = ? AND user_id = ?
+                SET name = $1, emoji = $2, color = $3, is_low_freq = $4
+                WHERE id = $5 AND user_id = $6
             `, c.Name, c.Emoji, c.Color, isLowFreqInt, c.ID, su.ID)
             if err != nil {
                 http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
@@ -950,7 +925,7 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
         } else {
             _, err := db.Exec(`
                 INSERT INTO sources_config (id, name, emoji, color, is_low_freq, sort_order, user_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
             `, c.ID, c.Name, c.Emoji, c.Color, isLowFreqInt, c.SortOrder, su.ID)
             if err != nil {
                 http.Error(w, "Database error: "+err.Error(), http.StatusInternalServerError)
@@ -973,8 +948,8 @@ func handleSources(w http.ResponseWriter, r *http.Request) {
             return
         }
 
-        resEvents, _ := tx.Exec(`DELETE FROM events WHERE source = ? AND user_id = ?`, source, su.ID)
-        resConfig, _ := tx.Exec(`DELETE FROM sources_config WHERE id = ? AND user_id = ?`, source, su.ID)
+        resEvents, _ := tx.Exec(`DELETE FROM events WHERE source = $1 AND user_id = $2`, source, su.ID)
+        resConfig, _ := tx.Exec(`DELETE FROM sources_config WHERE id = $1 AND user_id = $2`, source, su.ID)
 
         if err := tx.Commit(); err != nil {
             http.Error(w, "Database error", http.StatusInternalServerError)
@@ -1028,7 +1003,7 @@ func handleSourcesReorder(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    stmt, err := tx.Prepare(`UPDATE sources_config SET sort_order = ? WHERE id = ? AND user_id = ?`)
+    stmt, err := tx.Prepare(`UPDATE sources_config SET sort_order = $1 WHERE id = $2 AND user_id = $3`)
     if err != nil {
         tx.Rollback()
         http.Error(w, "Database error", http.StatusInternalServerError)
@@ -1060,9 +1035,9 @@ func handleSourcesReorder(w http.ResponseWriter, r *http.Request) {
 
 func calculateStreak(userID int64) int {
     rows, err := db.Query(`
-        SELECT DISTINCT date(timestamp) as day
+        SELECT DISTINCT to_char(timestamp, 'YYYY-MM-DD') as day
         FROM events
-        WHERE user_id = ?
+        WHERE user_id = $1
         ORDER BY day DESC
         LIMIT 365
     `, userID)
@@ -1150,7 +1125,7 @@ func setAllowRegister(v bool) error {
         val = "1"
     }
     _, err := db.Exec(`
-        INSERT INTO app_config (key, value) VALUES ('allow_register', ?)
+        INSERT INTO app_config (key, value) VALUES ('allow_register', $1)
         ON CONFLICT(key) DO UPDATE SET value = excluded.value
     `, val)
     return err

@@ -31,7 +31,8 @@ RUN mkdir -p /app/data
 
 # Environment
 ENV PORT=8080
-ENV DB_PATH=/app/data/contributions.db
+# PostgreSQL 连接串由 docker-compose 通过 DATABASE_URL 注入（示例）：
+# ENV DATABASE_URL=postgres://ocg:ocg@postgres:5432/ocg?sslmode=disable&TimeZone=Asia/Shanghai
 ENV STATIC_DIR=/app/static
 
 EXPOSE 8080
