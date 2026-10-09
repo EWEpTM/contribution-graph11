@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0d1117">
+    <meta name="description" content="个人活动记录与热力图">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Keep">
+    <meta name="mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <title>Keep</title>
+    <script src="/theme.js"></script>
+    <script src="/vendor/echarts.min.js"></script>
+    <link rel="stylesheet" href="/index.css">
+</head>
+<body>
+<div class="container">
+    <h1>Keep 热力图</h1>
+    <div class="source-tabs" id="sourceTabs"></div>
+    <div class="stats">
+        <div class="stat">
+            <div class="stat-val" id="statTotal">0</div>
+            <div class="stat-lbl">总计</div>
+        </div>
+        <div class="stat">
+            <div class="stat-val" id="statToday">0</div>
+            <div class="stat-lbl">今日</div>
+        </div>
+        <div class="stat">
+            <div class="stat-val" id="statStreak">0</div>
+            <div class="stat-lbl">连续</div>
+        </div>
+        <div class="stat">
+            <div class="stat-val" id="statSources">0</div>
+            <div class="stat-lbl">事件类</div>
+        </div>
+    </div>
+    <div class="graph-card">
+        <div class="graph-header">
+            <div class="graph-title">
+                <span>活动</span>
+                <span class="badge" id="currentBadge">
+                    <span class="dot" id="badgeDot"></span>
+                    <span id="badgeName">全部</span>
+                </span>
+                <button class="record-btn" id="recordBtn" onclick="handleRecordClick()">+ 记录</button>
+            </div>
+            <div style="display:flex;gap:0.5rem;align-items:center;">
+                <button class="stats-btn" id="statsBtn" style="display:none;" title="年度统计" onclick="location.href='/stats.html?year=' + encodeURIComponent(document.getElementById('year').value)">统计</button>
+                <select id="combineMode" style="display:none;" title="合并方式">
+                    <option value="winner">热度</option>
+                    <option value="stack">总计</option>
+                </select>
+                <select id="year"></select>
+            </div>
+        </div>
+        <div class="hm-body">
+            <div class="hm-weekcol" id="hmWeekCol" title="星期">
+                <span class="hm-week-item" data-w="0">一</span>
+                <span class="hm-week-item" data-w="2">三</span>
+                <span class="hm-week-item" data-w="4">五</span>
+            </div>
+            <div class="heatmap-wrap">
+                <div id="heatmap"></div>
+                <div id="hmMonthLabels"></div>
+            </div>
+        </div>
+        <div class="hm-scrollbar" id="hmScrollbar">
+            <div class="hm-scroll-thumb" id="hmScrollThumb"></div>
+        </div>
+        <div class="legend" id="legend"></div>
+    </div>
+    <footer>
+        <span id="footerLinks"></span>
+    </footer>
+</div>
+
+<div class="modal-overlay" id="selectModal">
+    <div class="custom-modal">
+        <div class="modal-header">
+            <div class="modal-title">选择要记录的事件</div>
+            <button class="modal-close" onclick="closeSelectModal()">×</button>
+        </div>
+        <div class="event-scroll-wrap" id="eventScrollContainer"></div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="confirmModal">
+    <div class="custom-modal" style="max-width: 360px;">
+        <div class="modal-title" style="margin-bottom:10px;">确认记录</div>
+        <p style="color:var(--muted);font-size:0.95rem;margin-bottom:12px;">
+            确定要为「<strong id="targetEventName" style="color:var(--text)"></strong>」记录一次吗？
+        </p>
+        <input id="noteInput" maxlength="10" placeholder="备注（可选，10字内）" autocomplete="off"
+               style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 10px;font-size:0.9rem;margin-bottom:16px;outline:none;">
+        <div class="modal-actions">
+            <button class="btn-modal btn-modal-cancel" onclick="closeConfirmModal()">取消</button>
+            <button class="btn-modal btn-modal-confirm" onclick="submitLog()">确定</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="detailModal">
+    <div class="custom-modal" style="max-width: 420px;">
+        <div class="modal-header">
+            <div class="modal-title" id="detailTitle">记录详情</div>
+            <button class="modal-close" onclick="closeDetailModal()">×</button>
+        </div>
+        <div class="detail-list" id="detailList"></div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="delConfirmModal">
+    <div class="custom-modal" style="max-width: 360px;">
+        <div class="modal-title" style="margin-bottom:10px;">确认删除</div>
+        <p style="color:var(--muted);font-size:0.95rem;margin-bottom:20px;">
+            确定要删除 <strong id="delTargetDesc" style="color:var(--text)"></strong> 这条记录吗？
+        </p>
+        <div class="modal-actions">
+            <button class="btn-modal btn-modal-cancel" onclick="closeDelConfirmModal()">取消</button>
+            <button class="btn-modal btn-modal-confirm" onclick="confirmDelete()">删除</button>
+        </div>
+    </div>
+</div>
+
+<div class="theme-fab" id="themeFab" title="颜色模式"><span>💡</span></div>
+<div class="theme-menu" id="themeMenu">
+    <div class="theme-menu-item" data-theme-opt="system">系统</div>
+    <div class="theme-menu-item" data-theme-opt="light">浅色</div>
+    <div class="theme-menu-item" data-theme-opt="dark">深色</div>
+</div>
+
+<div id="toast">✅ 记录成功！</div>
+
+
+<script src="/common.js"></script>
+<script src="/index.js"></script>
+</body>
+</html>
