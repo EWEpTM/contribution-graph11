@@ -1427,6 +1427,20 @@ function renderHeatmap() {
         };
     });
 
+    // 把整年没记录的日子也补成计数 0 的格子：让空白格 hover 同样能显示日期（tooltip 只对 data 里的点触发）
+    for (let m = 1; m <= 12; m++) {
+        const daysInMonth = new Date(year, m, 0).getDate();
+        for (let d = 1; d <= daysInMonth; d++) {
+            const ds = year + '-' + String(m).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+            if (!days[ds]) {
+                chartData.push({
+                    value: [ds, 0],
+                    itemStyle: { color: cCell, borderColor: cCellBorder, borderWidth: 1, borderRadius: 2 }
+                });
+            }
+        }
+    }
+
     const legendColor = isCombined ? { rgb: '35,134,54', hex: '#238636' } : getColor(currentSource);
     // 图例统一显示 无/少/中/较多/多
     const lv = ['无', '少', '中', '较多', '多'];
@@ -1516,16 +1530,28 @@ function renderHeatmap() {
             tooltip: {
                 show: !isTouchDevice(),  // 触控端不显示 tooltip（点击格子直接弹详情），仅 PC 悬停
                 appendToBody: true,
-                confine: false,
+                confine: true,  // 靠近视口边缘时自动翻转/收拢，避免 tooltip 被截断
                 triggerOn: 'mousemove',
                 extraCssText: 'z-index: 9999; pointer-events: none;',
                 position: function (point, params, dom, rect, size) {
-                    return [point[0], Math.max(8, point[1] - size.contentSize[1] - 12)];
+                    const tipW = size.contentSize[0];
+                    const tipH = size.contentSize[1];
+                    // 返回图表内坐标（ECharts 自动加容器偏移）；判断溢出时换算成屏幕坐标
+                    const hmLeft = document.getElementById('heatmap').getBoundingClientRect().left;
+                    let x = point[0];
+                    let y = point[1] - tipH - 12;
+                    if (x + hmLeft + tipW > window.innerWidth - 10) {
+                        x = point[0] - tipW - 12;
+                        if (x + hmLeft < 10) x = 10 - hmLeft;
+                    }
+                    if (y < 10) y = point[1] + 12;
+                    return [x, y];
                 },
                 formatter: p => {
                     if (!p.data || !p.data.value) return '';
                     const date = p.data.value[0];
                     const count = p.data.value[1];
+                    if (!count) return `<b>${date}</b>`;  // 没记录的日子只显示日期
                     const dayStats = days[date];
                     let tip = `<b>${date}</b><br/>${count} 次`;
                     if (isCombined && dayStats) {
