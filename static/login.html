@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0d1117">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+    <title>Keep - 登录</title>
+    <script src="/theme.js"></script>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --bg2: #161b22;
+            --bg3: #21262d;
+            --text: #e6edf3;
+            --muted: #8b949e;
+            --border: #30363d;
+            --green: #238636;
+            --green-hover: #2ea043;
+            --danger: #f85149;
+            --accent: #58a6ff;
+        }
+        html[data-theme="light"] {
+            --bg: #ffffff;
+            --bg2: #f6f8fa;
+            --bg3: #eaeef2;
+            --text: #1f2328;
+            --muted: #656d76;
+            --border: #d0d7de;
+            --green: #1a7f37;
+            --green-hover: #2da44e;
+            --danger: #cf222e;
+            --accent: #0969da;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem 1rem;
+        }
+        .login-card {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2.2rem 2rem 1.8rem;
+            width: 100%;
+            max-width: 380px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        h1 {
+            text-align: center;
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(135deg, var(--green), var(--accent));
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .tabs {
+            display: flex;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 3px;
+            margin-bottom: 1.4rem;
+        }
+        .tab {
+            flex: 1;
+            text-align: center;
+            padding: 0.5rem 0;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--muted);
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            background: transparent;
+        }
+        .tab.active {
+            background: var(--bg3);
+            color: var(--text);
+        }
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+        label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--muted);
+            margin-bottom: 0.5rem;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 1rem;
+            transition: border-color 0.2s;
+        }
+        input[type="text"]:focus, input[type="password"]:focus {
+            outline: none;
+            border-color: var(--green);
+        }
+        .btn-login {
+            width: 100%;
+            padding: 0.8rem;
+            background: var(--green);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 0.5rem;
+            transition: background 0.2s;
+        }
+        .btn-login:hover { background: var(--green-hover); }
+        .error-msg {
+            color: var(--danger);
+            font-size: 0.85rem;
+            margin-top: 1rem;
+            text-align: center;
+            display: none;
+        }
+        .reg-closed {
+            background: var(--bg);
+            border: 1px dashed var(--border);
+            border-radius: 10px;
+            padding: 1rem;
+            text-align: center;
+            font-size: 0.88rem;
+            color: var(--muted);
+            display: none;
+            margin-top: 0.25rem;
+        }
+        .tip {
+            text-align: center;
+            font-size: 0.78rem;
+            color: var(--muted);
+            margin-top: 1.1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h1>Keep</h1>
+        <div class="tabs">
+            <button class="tab active" id="tabLogin" onclick="switchTab('login')">登录</button>
+            <button class="tab" id="tabRegister" onclick="switchTab('register')">注册</button>
+        </div>
+
+        <form id="loginForm" onsubmit="handleLogin(event)" style="display:block;">
+            <div class="form-group">
+                <label for="username">账号</label>
+                <input type="text" id="username" placeholder="请输入账号" required autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label for="password">密码</label>
+                <input type="password" id="password" placeholder="请输入密码" required autocomplete="current-password">
+            </div>
+            <button type="submit" class="btn-login" id="loginBtn">登录</button>
+            <div class="error-msg" id="loginErr"></div>
+        </form>
+
+        <form id="registerForm" onsubmit="handleRegister(event)" style="display:none;">
+            <div class="form-group">
+                <label for="regUsername">账号</label>
+                <input type="text" id="regUsername" placeholder="2-32 个字符" required autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label for="regPassword">密码</label>
+                <input type="password" id="regPassword" placeholder="至少 6 位" required autocomplete="new-password">
+            </div>
+            <div class="form-group">
+                <label for="regPassword2">确认密码</label>
+                <input type="password" id="regPassword2" placeholder="再次输入密码" required autocomplete="new-password">
+            </div>
+            <button type="submit" class="btn-login" id="regBtn">注册</button>
+            <div class="error-msg" id="regErr"></div>
+        </form>
+        <div class="reg-closed" id="regClosed">注册未开放，请联系管理员开启</div>
+
+        <div class="tip" id="modeTip">注册后为普通用户账号，仅可查看和记录自己的活动</div>
+    </div>
+
+    <script>
+        let allowRegister = false;
+
+        function switchTab(mode) {
+            document.getElementById('tabLogin').classList.toggle('active', mode === 'login');
+            document.getElementById('tabRegister').classList.toggle('active', mode === 'register');
+            document.getElementById('loginForm').style.display = mode === 'login' ? 'block' : 'none';
+            document.getElementById('registerForm').style.display = mode === 'register' ? 'block' : 'none';
+            const closed = document.getElementById('regClosed');
+            const btn = document.getElementById('regBtn');
+            if (mode === 'register') {
+                closed.style.display = allowRegister ? 'none' : 'block';
+                btn.disabled = !allowRegister;
+            }
+        }
+
+        // 读取注册开关（管理员在用户管理页开启后才允许注册）
+        async function loadRegStatus() {
+            try {
+                const res = await fetch('/api/config');
+                if (res.ok) {
+                    const d = await res.json();
+                    allowRegister = !!d.allow_register;
+                }
+            } catch (e) { /* 离线或请求失败时保持未开放 */ }
+            if (document.getElementById('registerForm').style.display === 'block') {
+                document.getElementById('regClosed').style.display = allowRegister ? 'none' : 'block';
+                document.getElementById('regBtn').disabled = !allowRegister;
+            }
+        }
+        loadRegStatus();
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const btn = document.getElementById('loginBtn');
+            const errEl = document.getElementById('loginErr');
+            errEl.style.display = 'none';
+            btn.disabled = true;
+            btn.textContent = '登录中...';
+
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                if (res.ok) {
+                    window.location.href = '/';
+                } else {
+                    const data = await res.json().catch(() => ({}));
+                    errEl.textContent = data.error || '登录失败，请检查账号密码';
+                    errEl.style.display = 'block';
+                }
+            } catch (err) {
+                errEl.textContent = '网络请求失败，请稍后重试';
+                errEl.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '登录';
+            }
+        }
+
+        async function handleRegister(e) {
+            e.preventDefault();
+            const btn = document.getElementById('regBtn');
+            const errEl = document.getElementById('regErr');
+            errEl.style.display = 'none';
+
+            const username = document.getElementById('regUsername').value.trim();
+            const password = document.getElementById('regPassword').value;
+            const password2 = document.getElementById('regPassword2').value;
+
+            if (password !== password2) {
+                errEl.textContent = '两次输入的密码不一致';
+                errEl.style.display = 'block';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '注册中...';
+
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                if (res.ok) {
+                    window.location.href = '/';
+                } else {
+                    const data = await res.json().catch(() => ({}));
+                    errEl.textContent = data.error || '注册失败，请稍后重试';
+                    errEl.style.display = 'block';
+                }
+            } catch (err) {
+                errEl.textContent = '网络请求失败，请稍后重试';
+                errEl.style.display = 'block';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '注册';
+            }
+        }
+    </script>
+    <script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+    }
+    </script>
+</body>
+</html>
