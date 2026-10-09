@@ -1232,11 +1232,20 @@ function onHeatmapClick(params) {
     if (!params || !params.data || !params.data.value) return;
     const date = params.data.value[0];
     if (!date) return;
-    // 点新格子：显示 tooltip（触摸端当作 hover 用）
+    // 点新格子：显示 tooltip，并用 convertToPixel 把位置钉死在格子中心
     if (lastTapDate !== date) {
         lastTapDate = date;
         if (chart && !chart.isDisposed()) {
-            chart.dispatchAction({ type: 'showTip', seriesIndex: params.seriesIndex, dataIndex: params.dataIndex });
+            const px = chart.convertToPixel({ coordSysName: 'calendar', calendarIndex: 0 }, date);
+            if (px && typeof px[0] === 'number') {
+                chart.dispatchAction({
+                    type: 'showTip',
+                    seriesIndex: params.seriesIndex,
+                    dataIndex: params.dataIndex,
+                    x: px[0],
+                    y: px[1]
+                });
+            }
         }
         return;
     }
@@ -1548,7 +1557,7 @@ function renderHeatmap() {
                 show: true,
                 appendToBody: true,
                 confine: true,  // 靠近视口边缘时自动翻转/收拢，避免 tooltip 被截断
-                triggerOn: 'mousemove',
+                triggerOn: 'mousemove|click',
                 extraCssText: 'z-index: 9999; pointer-events: none;',
                 position: function (point, params, dom, rect, size) {
                     const tipW = size.contentSize[0];
