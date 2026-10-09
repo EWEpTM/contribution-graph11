@@ -1068,22 +1068,12 @@ async function init() {
         e.stopPropagation();
     });
 
-    // 小提示框：点热力图外/滑动时隐藏；点格子由 click 负责 showTip
-    document.addEventListener('touchstart', function (e) {
-        if (e.target && e.target.closest && e.target.closest('#heatmap')) return;
-        if (chart && !chart.isDisposed()) chart.dispatchAction({ type: 'hideTip' });
-    }, { capture: true });
+    // PC 端：点击热力图之外的位置隐藏悬停提示
     document.addEventListener('click', function (e) {
         if (!(e.target && e.target.closest && e.target.closest('#heatmap'))) {
             if (chart && !chart.isDisposed()) chart.dispatchAction({ type: 'hideTip' });
         }
     });
-    // 滑动热力图时隐藏 tooltip
-    if (heatWrap) {
-        heatWrap.addEventListener('touchmove', function () {
-            if (chart && !chart.isDisposed()) chart.dispatchAction({ type: 'hideTip' });
-        }, { passive: true });
-    }
 
     setInterval(async () => {
         await loadSourceColorsFromDB();
@@ -1227,31 +1217,12 @@ let detailDate = null;
 let detailRecords = [];
 let pendingDeleteId = null;
 
-let lastTapDate = null;
 function onHeatmapClick(params) {
+    // 全部视图点击不弹窗；具体事件视图点击有记录的格子弹详情
+    if (currentSource === 'combined') return;
     if (!params || !params.data || !params.data.value) return;
     const date = params.data.value[0];
     if (!date) return;
-    // 点新格子：显示 tooltip，并用 convertToPixel 把位置钉死在格子中心
-    if (lastTapDate !== date) {
-        lastTapDate = date;
-        if (chart && !chart.isDisposed()) {
-            const px = chart.convertToPixel({ coordSysName: 'calendar', calendarIndex: 0 }, date);
-            if (px && typeof px[0] === 'number') {
-                chart.dispatchAction({
-                    type: 'showTip',
-                    seriesIndex: params.seriesIndex,
-                    dataIndex: params.dataIndex,
-                    x: px[0],
-                    y: px[1]
-                });
-            }
-        }
-        return;
-    }
-    // 再点同一格：进详情（combined 视图无详情可看）
-    lastTapDate = null;
-    if (currentSource === 'combined') return;
     const recs = (allData || []).filter(function (c) {
         return c.source === currentSource &&
             (c.local_date || (c.timestamp || '').slice(0, 10)) === date;
@@ -1554,24 +1525,27 @@ function renderHeatmap() {
             backgroundColor: 'transparent',
             animation: false,
             tooltip: {
-                show: true,
+                show: !isTouchDevice(),  // 仅 PC 悬停显示；移动端点格子直接弹详情
                 appendToBody: true,
-                confine: true,  // 靠近视口边缘时自动翻转/收拢，避免 tooltip 被截断
-                triggerOn: 'mousemove|click',
+                confine: true,
+                triggerOn: 'mousemove',
                 extraCssText: 'z-index: 9999; pointer-events: none;',
                 position: function (point, params, dom, rect, size) {
                     const tipW = size.contentSize[0];
                     const tipH = size.contentSize[1];
-                    // 返回图表内坐标（ECharts 自动加容器偏移）；判断溢出时换算成屏幕坐标
+                    // 返回图表内坐标；换算成屏幕坐标后双向钳位，保证 tooltip 完整在视口内
                     const hmLeft = document.getElementById('heatmap').getBoundingClientRect().left;
-                    let x = point[0];
                     let y = point[1] - tipH - 12;
-                    if (x + hmLeft + tipW > window.innerWidth - 10) {
-                        x = point[0] - tipW - 12;
-                        if (x + hmLeft < 10) x = 10 - hmLeft;
-                    }
                     if (y < 10) y = point[1] + 12;
-                    return [x, y];
+                    let screenX = point[0] + hmLeft;
+                    // 右边放不下 → 翻到格子左边
+                    if (screenX + tipW > window.innerWidth - 10) {
+                        screenX = point[0] + hmLeft - tipW - 12;
+                    }
+                    // 左右双向钳位
+                    if (screenX < 10) screenX = 10;
+                    if (screenX + tipW > window.innerWidth - 10) screenX = window.innerWidth - 10 - tipW;
+                    return [screenX - hmLeft, y];
                 },
                 formatter: p => {
                     if (!p.data || !p.data.value) return '';
