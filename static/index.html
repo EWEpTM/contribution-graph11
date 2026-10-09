@@ -1068,8 +1068,9 @@ async function init() {
         e.stopPropagation();
     });
 
-    // 小提示框：触摸屏幕任意处即隐藏（含滑动）；点击热力图之外的位置也隐藏
+    // 小提示框：点热力图外/滑动时隐藏；点格子由 click 负责 showTip
     document.addEventListener('touchstart', function (e) {
+        if (e.target && e.target.closest && e.target.closest('#heatmap')) return;
         if (chart && !chart.isDisposed()) chart.dispatchAction({ type: 'hideTip' });
     }, { capture: true });
     document.addEventListener('click', function (e) {
@@ -1077,6 +1078,12 @@ async function init() {
             if (chart && !chart.isDisposed()) chart.dispatchAction({ type: 'hideTip' });
         }
     });
+    // 滑动热力图时隐藏 tooltip
+    if (heatWrap) {
+        heatWrap.addEventListener('touchmove', function () {
+            if (chart && !chart.isDisposed()) chart.dispatchAction({ type: 'hideTip' });
+        }, { passive: true });
+    }
 
     setInterval(async () => {
         await loadSourceColorsFromDB();
