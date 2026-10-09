@@ -502,24 +502,22 @@
             text-align: center;
         }
         #toast.show { visibility: visible; opacity: 1; }
-        #tipPopup {
-            display: none;
-            position: fixed;
-            z-index: 1990;
-            background: var(--bg2);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            box-shadow: var(--modal-shadow);
-            padding: 7px 12px;
-            font-size: 0.85rem;
-            line-height: 1.35;
-            text-align: center;
-            color: var(--text);
-            pointer-events: none;
-            white-space: nowrap;
+        .hm-body { display: flex; flex: 1 1 auto; min-height: 0; align-items: stretch; }
+        .hm-weekcol {
+            position: relative;
+            flex: 0 0 18px;
+            margin-right: 5px;
+            padding-top: 2px;
         }
-        #tipPopup .tip-date { font-weight: 600; }
-        #tipPopup .tip-count { color: var(--muted); font-size: 0.8rem; }
+        .hm-week-item {
+            position: absolute;
+            right: 0;
+            transform: translateY(-50%);
+            color: var(--muted);
+            font-size: var(--week-label-size, 10px);
+            line-height: 1;
+            user-select: none;
+        }
         .theme-fab {
             position: fixed;
             right: 20px;
@@ -621,9 +619,16 @@
                 <select id="year"></select>
             </div>
         </div>
-        <div class="heatmap-wrap">
-            <div id="heatmap"></div>
-            <div id="hmMonthLabels"></div>
+        <div class="hm-body">
+            <div class="hm-weekcol" id="hmWeekCol" title="星期">
+                <span class="hm-week-item" data-w="0">一</span>
+                <span class="hm-week-item" data-w="2">三</span>
+                <span class="hm-week-item" data-w="4">五</span>
+            </div>
+            <div class="heatmap-wrap">
+                <div id="heatmap"></div>
+                <div id="hmMonthLabels"></div>
+            </div>
         </div>
         <div class="hm-scrollbar" id="hmScrollbar">
             <div class="hm-scroll-thumb" id="hmScrollThumb"></div>
@@ -690,8 +695,6 @@
 
 <div id="toast">✅ 记录成功！</div>
 
-<!-- 点击格子后的小提示框（日期+次数）：点击其他地方/滑动屏幕即消失，详情大页仅 × 关闭 -->
-<div id="tipPopup"></div>
 
 <script>
 const DEFAULT_PRESETS = {
@@ -798,6 +801,29 @@ function updateThemeMenu() {
     const items = document.querySelectorAll('.theme-menu-item');
     items.forEach(function (el) {
         el.classList.toggle('active', el.dataset.themeOpt === themePref);
+    });
+}
+
+// 常驻星期列（一/三/五）：固定在热力图左侧不随滚动，行位严格对齐日历格子行
+// 直接用 convertToPixel 取当年 1 月首个周一/周三/周五所在行的真实网格 y（与 ECharts 渲染一致）
+function layoutWeekLabels() {
+    const col = document.getElementById('hmWeekCol');
+    const wrap = document.querySelector('.heatmap-wrap');
+    const hm = document.getElementById('heatmap');
+    if (!col || !wrap || !hm || !chart || chart.isDisposed()) return;
+    const hmR = hm.getBoundingClientRect();
+    const wr = wrap.getBoundingClientRect();
+    const topOff = hmR.top - wr.top;
+    const y = year || 2026;
+    const jan1 = new Date(y, 0, 1);
+    const monday = 1 + (((8 - jan1.getDay()) % 7) || 0);  // 1 月首个周一
+    const rows = [monday, monday + 2, monday + 4];        // 周一 / 周三 / 周五
+    col.querySelectorAll('.hm-week-item').forEach(function (el, i) {
+        const dateStr = y + '-' + String(1).padStart(2, '0') + '-' + String(rows[i]).padStart(2, '0');
+        const px = chart.convertToPixel({ coordSysName: 'calendar', calendarIndex: 0 }, dateStr);
+        if (px && typeof px[1] === 'number') {
+            el.style.top = (topOff + px[1]) + 'px';
+        }
     });
 }
 
@@ -1017,7 +1043,6 @@ async function init() {
     const detailOv = document.getElementById('detailModal');
     detailOv.addEventListener('click', function (e) {
         if (e.target === detailOv) {
-            hideTipPopup();
             if (chart && !chart.isDisposed()) chart.dispatchAction({ type: 'hideTip' });
         }
         e.stopPropagation();
@@ -1025,12 +1050,10 @@ async function init() {
 
     // 小提示框：触摸屏幕任意处即隐藏（含滑动）；点击热力图之外的位置也隐藏
     document.addEventListener('touchstart', function (e) {
-        hideTipPopup();
         if (chart && !chart.isDisposed()) chart.dispatchAction({ type: 'hideTip' });
     }, { capture: true });
     document.addEventListener('click', function (e) {
         if (!(e.target && e.target.closest && e.target.closest('#heatmap'))) {
-            hideTipPopup();
             if (chart && !chart.isDisposed()) chart.dispatchAction({ type: 'hideTip' });
         }
     });
@@ -1146,9 +1169,15 @@ function escapeHtml(s) {
 }
 
 function fmtTime(t) {
+    // 屏蔽秒钟：一律只显示 HH:mm
     if (!t) return '';
     if (t.length >= 16) return t.slice(11, 16);
     return t;
+}
+
+// 触控端判定：触控设备不显示悬停 tooltip（点击格子直接弹详情）
+function isTouchDevice() {
+    return ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
 }
 
 // 计算某月区间跨过的周列数（以周一为一周起点），用于自适应格子尺寸
@@ -1182,9 +1211,6 @@ function onHeatmapClick(params) {
     detailRecords = recs.slice().sort(function (a, b) {
         return (a.timestamp || '').localeCompare(b.timestamp || '');
     });
-    // 显示小提示框（日期+次数）：移动端点击格子必须能看到；点其他地方/滑动屏幕即消失，
-    // 详情大页不受影响（仅 × 关闭）
-    showTipPopup(date, recs.length, params);
     openDetailModal();
 }
 
@@ -1216,50 +1242,12 @@ function renderDetailList() {
 function closeDetailModal() {
     document.getElementById('detailModal').classList.remove('show');
     document.getElementById('detailList').innerHTML = '';
-    hideTipPopup();
     if (chart && !chart.isDisposed()) chart.dispatchAction({ type: 'hideTip' });
     detailDate = null;
     detailRecords = [];
     pendingDeleteId = null;
 }
 
-// 小提示框（日期+次数）：点击格子时显示在格子附近，点击其他地方/滑动屏幕/关闭详情时消失
-function showTipPopup(date, count, params) {
-    const el = document.getElementById('tipPopup');
-    el.innerHTML = '<div class="tip-date">' + date + '</div><div class="tip-count">' + count + ' 次</div>';
-    let x = 0, y = 0;
-    const hmEl = document.getElementById('heatmap');
-    if (hmEl && chart && !chart.isDisposed()) {
-        const rect = hmEl.getBoundingClientRect();
-        const px = chart.convertToPixel({ coordSysName: 'calendar', calendarIndex: 0 }, date);
-        const cs = chart.getOption().calendar[0].cellSize;
-        const cellH = (Array.isArray(cs) ? cs[1] : cs) || 20;
-        if (px && typeof px[0] === 'number') {
-            x = rect.left + px[0];
-            y = rect.top + px[1] + cellH / 2;
-        }
-    }
-    if (!x) {
-        // 兜底：用点击事件的屏幕坐标
-        const ev = params && params.event;
-        if (ev && typeof ev.offsetX === 'number') {
-            x = ev.offsetX + (hmEl ? hmEl.getBoundingClientRect().left : 0);
-            y = ev.offsetY + (hmEl ? hmEl.getBoundingClientRect().top : 0);
-        }
-    }
-    el.style.display = 'block';
-    const w = el.offsetWidth, h = el.offsetHeight;
-    let l = x - w / 2;
-    let t = y - h - 12;
-    l = Math.max(8, Math.min(window.innerWidth - w - 8, l));
-    t = Math.max(8, Math.min(window.innerHeight - h - 8, t));
-    el.style.left = l + 'px';
-    el.style.top = t + 'px';
-}
-
-function hideTipPopup() {
-    document.getElementById('tipPopup').style.display = 'none';
-}
 
 function requestDelete(id) {
     pendingDeleteId = id;
@@ -1297,8 +1285,6 @@ async function confirmDelete() {
             });
             if (detailRecords.length === 0) { closeDetailModal(); return; }
             renderDetailList();
-            // 记录已变化，隐藏小提示框避免显示过期的次数
-            hideTipPopup();
         } else {
             showToast('❌ 删除失败，请重试');
         }
@@ -1446,7 +1432,7 @@ function renderHeatmap() {
     let avail = wrap.clientWidth || vw;
     if (avail < 80) avail = vw - 24;
 
-    const leftPad = isNarrow ? 18 : (isTablet ? 28 : 48);
+    const leftPad = 2;
     // 滚动视图（手机/平板）右缘贴边，让"跨月边界列"整列压在视口外；桌面完整展示留右边距
     const rightPad = vw < 1280 ? 0 : 24;
     let cell;
@@ -1496,10 +1482,12 @@ function renderHeatmap() {
         const labelSize = Math.max(9, Math.min(13, Math.floor(cell * 0.7)));
         const monthSize = Math.max(10, Math.min(13, Math.floor(cell * 0.75)));
         document.documentElement.style.setProperty('--month-label-size', monthSize + 'px');
+        document.documentElement.style.setProperty('--week-label-size', labelSize + 'px');
         chart.setOption({
             backgroundColor: 'transparent',
             animation: false,
             tooltip: {
+                show: !isTouchDevice(),  // 触控端不显示 tooltip（点击格子直接弹详情），仅 PC 悬停
                 appendToBody: true,
                 confine: false,
                 triggerOn: 'mousemove',
@@ -1532,12 +1520,7 @@ function renderHeatmap() {
                 itemStyle: { color: cCell, borderColor: cCellBorder, borderWidth: 1 },
                 splitLine: { show: false },
                 yearLabel: { show: false },
-                dayLabel: {
-                    color: cMuted, firstDay: 1,
-                    // nameMap 下标 = 星期几（0=周日）：周一/周三/周五显示 一/三/五，其余留空
-                    nameMap: ['', '一', '', '三', '', '五', ''],
-                    fontSize: labelSize
-                },
+                dayLabel: { show: false },  // 一/三/五 改由外部常驻星期列显示（不随滚动）
                 monthLabel: { show: false }  // 月份标签改用 HTML 覆盖层（可在边缘被切时隐藏）
             },
             series: { type: 'heatmap', coordinateSystem: 'calendar', data: chartData }
@@ -1546,6 +1529,7 @@ function renderHeatmap() {
             if (chart && !chart.isDisposed()) chart.resize({ width: graphW, height: graphH });
             syncScrollbar();
             layoutMonthLabels();
+            layoutWeekLabels();
             if (!window.__initedCentered) {
                 if (centerOnCurrentMonth(wrap, cell)) window.__initedCentered = true;
             }
