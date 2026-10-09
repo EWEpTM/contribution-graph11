@@ -229,6 +229,14 @@
         renderList('listLow', low, 'low');
     }
 
+    function colorCss(c) {
+        if (!c) return '#8b949e';
+        c = String(c).trim();
+        if (c.indexOf('#') === 0) return c;             // hex：#238636
+        if (/^\d{1,3}(\s*,\s*\d{1,3}){2}$/.test(c)) return 'rgb(' + c + ')'; // r,g,b
+        return '#8b949e';
+    }
+
     function renderList(elId, rows) {
         const el = document.getElementById(elId);
         if (!el) return;
@@ -240,7 +248,7 @@
         const max = rows[0].count;
         el.innerHTML = rows.map(function (r) {
             const pct = (r.count / max * 100).toFixed(1);
-            const color = 'rgb(' + (r.color || '139,148,158') + ')';
+            const color = colorCss(r.color);
             const nameHtml = '<span class="ev-name">' + escapeHtml(r.emoji ? r.emoji + ' ' : '') + escapeHtml(r.name) + '</span>';
             const countHtml = '<span class="ev-count">' + r.count + '</span>';
             return '<div class="ev-row">' +
