@@ -670,7 +670,7 @@
         <p style="color:var(--muted);font-size:0.95rem;margin-bottom:12px;">
             确定要为「<strong id="targetEventName" style="color:var(--text)"></strong>」记录一次吗？
         </p>
-        <input id="noteInput" maxlength="16" placeholder="备注（可选，16字内）" autocomplete="off"
+        <input id="noteInput" maxlength="10" placeholder="备注（可选，10字内）" autocomplete="off"
                style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 10px;font-size:0.9rem;margin-bottom:16px;outline:none;">
         <div class="modal-actions">
             <button class="btn-modal btn-modal-cancel" onclick="closeConfirmModal()">取消</button>
@@ -1154,7 +1154,7 @@ async function submitLog() {
     if (!pendingTargetSource) return;
     const target = pendingTargetSource;
     // 备注可选：留空则 context 为 manual（详情页不显示）；填了就作为 context 展示在时间与删除之间
-    const note = (document.getElementById('noteInput').value || '').trim().slice(0, 16);
+    const note = (document.getElementById('noteInput').value || '').trim().slice(0, 10);
     closeConfirmModal();
     try {
         const res = await fetch('/api/contributions', {
@@ -1608,3 +1608,4 @@ init();
 </script>
 </body>
 </html>
+<!-- （注：内容由AI生成） -->
