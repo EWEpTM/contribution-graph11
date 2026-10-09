@@ -1,6 +1,6 @@
 /* Keep PWA Service Worker */
-const CACHE_STATIC = 'keep-static-v22';
-const CACHE_RUNTIME = 'keep-runtime-v22';
+const CACHE_STATIC = 'keep-static-v25';
+const CACHE_RUNTIME = 'keep-runtime-v25';
 
 const PRECACHE_URLS = [
   '/',
@@ -8,6 +8,7 @@ const PRECACHE_URLS = [
   '/manage.html',
   '/login.html',
   '/users.html',
+  '/stats.html',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
