@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#0d1117">
-    <meta name="description" content="个人活动打卡与热力图">
+    <meta name="description" content="个人活动记录与热力图">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Keep">
@@ -666,10 +666,12 @@
 
 <div class="modal-overlay" id="confirmModal">
     <div class="custom-modal" style="max-width: 360px;">
-        <div class="modal-title" style="margin-bottom:10px;">确认打卡</div>
-        <p style="color:var(--muted);font-size:0.95rem;margin-bottom:20px;">
-            确定要为「<strong id="targetEventName" style="color:var(--text)"></strong>」记录一次打卡吗？
+        <div class="modal-title" style="margin-bottom:10px;">确认记录</div>
+        <p style="color:var(--muted);font-size:0.95rem;margin-bottom:12px;">
+            确定要为「<strong id="targetEventName" style="color:var(--text)"></strong>」记录一次吗？
         </p>
+        <input id="noteInput" maxlength="16" placeholder="备注（可选，16字内）" autocomplete="off"
+               style="width:100%;box-sizing:border-box;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 10px;font-size:0.9rem;margin-bottom:16px;outline:none;">
         <div class="modal-actions">
             <button class="btn-modal btn-modal-cancel" onclick="closeConfirmModal()">取消</button>
             <button class="btn-modal btn-modal-confirm" onclick="submitLog()">确定</button>
@@ -680,7 +682,7 @@
 <div class="modal-overlay" id="detailModal">
     <div class="custom-modal" style="max-width: 420px;">
         <div class="modal-header">
-            <div class="modal-title" id="detailTitle">打卡详情</div>
+            <div class="modal-title" id="detailTitle">记录详情</div>
             <button class="modal-close" onclick="closeDetailModal()">×</button>
         </div>
         <div class="detail-list" id="detailList"></div>
@@ -1136,8 +1138,11 @@ function promptConfirmLog(sourceId) {
     pendingTargetSource = sourceId;
     const info = getColor(sourceId);
     document.getElementById('targetEventName').textContent = info.name || sourceId;
+    const note = document.getElementById('noteInput');
+    if (note) note.value = '';
     closeSelectModal();
     document.getElementById('confirmModal').classList.add('show');
+    if (note) setTimeout(() => note.focus(), 50);
 }
 
 function closeConfirmModal() {
@@ -1148,6 +1153,8 @@ function closeConfirmModal() {
 async function submitLog() {
     if (!pendingTargetSource) return;
     const target = pendingTargetSource;
+    // 备注可选：留空则 context 为 manual（详情页不显示）；填了就作为 context 展示在时间与删除之间
+    const note = (document.getElementById('noteInput').value || '').trim().slice(0, 16);
     closeConfirmModal();
     try {
         const res = await fetch('/api/contributions', {
@@ -1155,7 +1162,7 @@ async function submitLog() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify([{
                 source: target,
-                context: 'manual',
+                context: note || 'manual',
                 timestamp: new Date().toISOString(),
                 metadata: { device: 'web', manual: true }
             }])

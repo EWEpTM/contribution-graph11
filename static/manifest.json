@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Keep 热力图",
   "short_name": "Keep",
-  "description": "个人活动打卡与热力图",
+  "description": "个人活动记录与热力图",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
