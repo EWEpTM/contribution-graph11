@@ -181,6 +181,18 @@
             flex: 1 1 auto;
             min-height: 0;
         }
+        .stats-btn {
+            background: var(--bg3);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 6px 11px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.2s, color 0.2s;
+        }
+        .stats-btn:hover { background: var(--green); color: #fff; }
         .graph-header {
             position: relative;
             z-index: 2;
@@ -611,9 +623,9 @@
                 <button class="record-btn" id="recordBtn" onclick="handleRecordClick()">+ 记录</button>
             </div>
             <div style="display:flex;gap:0.5rem;align-items:center;">
+                <button class="stats-btn" id="statsBtn" style="display:none;" title="年度统计" onclick="location.href='/stats.html?year=' + encodeURIComponent(document.getElementById('year').value)">统计</button>
                 <select id="combineMode" style="display:none;" title="合并方式">
                     <option value="winner">热度</option>
-                    <option value="blend">混合</option>
                     <option value="stack">总计</option>
                 </select>
                 <select id="year"></select>
@@ -1356,6 +1368,7 @@ function renderStats() {
 function renderHeatmap() {
     const isCombined = currentSource === 'combined';
     document.getElementById('combineMode').style.display = isCombined ? '' : 'none';
+    document.getElementById('statsBtn').style.display = isCombined ? '' : 'none';
     const c = isCombined
         ? { hex: 'linear-gradient(135deg,#238636,#3b82f6)', name: '全部' }
         : getColor(currentSource);
@@ -1403,12 +1416,14 @@ function renderHeatmap() {
     });
 
     const legendColor = isCombined ? { rgb: '35,134,54', hex: '#238636' } : getColor(currentSource);
+    // 总计模式亮度档位为 0/3/6/9/12，图例同步显示；普通/热度模式显示 无/少/中/较多/多
+    const lv = (isCombined && combineMode === 'stack') ? ['0', '1-5', '6-10', '11-15', '16+'] : ['无', '少', '中', '较多', '多'];
     document.getElementById('legend').innerHTML = `
-        <div class="legend-item"><div class="legend-box" style="background:${cCell}"></div>无</div>
-        <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.35)"></div>少</div>
-        <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.65)"></div>中</div>
-        <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.85)"></div>较多</div>
-        <div class="legend-item"><div class="legend-box" style="background:${legendColor.hex}"></div>多</div>
+        <div class="legend-item"><div class="legend-box" style="background:${cCell}"></div>${lv[0]}</div>
+        <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.35)"></div>${lv[1]}</div>
+        <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.65)"></div>${lv[2]}</div>
+        <div class="legend-item"><div class="legend-box" style="background:rgba(${legendColor.rgb},0.85)"></div>${lv[3]}</div>
+        <div class="legend-item"><div class="legend-box" style="background:${legendColor.hex}"></div>${lv[4]}</div>
     `;
 
     const el = document.getElementById('heatmap');
@@ -1552,16 +1567,9 @@ function getCombinedColor(stats) {
             : op(stats.total);
         return `rgba(${sc.rgb},${opacity})`;
     }
-    if (combineMode === 'blend') {
-        let r = 0, g = 0, b = 0;
-        sources.forEach(([src, cnt]) => {
-            const rgb = getColor(src).rgb.split(',').map(Number);
-            const w = cnt / stats.total;
-            r += rgb[0] * w; g += rgb[1] * w; b += rgb[2] * w;
-        });
-        return `rgba(${Math.round(r)},${Math.round(g)},${Math.round(b)},${op(stats.total)})`;
-    }
-    return `rgba(35,134,54,${op(stats.total)})`;
+    // 总计：亮度按 0/1-5/6-10/11-15/16+ 分档（独立于普通 0/1/2/3/4），0 次空白
+    const totalStep = (t) => t <= 0 ? 0 : (t <= 5 ? 0.35 : (t <= 10 ? 0.65 : (t <= 15 ? 0.85 : 1.0)));
+    return `rgba(35,134,54,${totalStep(stats.total)})`;
 }
 
 window.addEventListener('resize', () => {
