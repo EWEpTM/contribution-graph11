@@ -444,7 +444,7 @@ function openSelectEventModal() {
         });
         container.innerHTML = html;
         container.querySelectorAll('.event-card').forEach(function (el) {
-            el.addEventListener('click', function () { promptConfirmLog(el.dataset.eid); });
+            el.addEventListener('click', function () { directLog(el.dataset.eid); });
         });
     }
     document.getElementById('selectModal').classList.add('show');
@@ -467,6 +467,37 @@ function promptConfirmLog(sourceId) {
 function closeConfirmModal() {
     document.getElementById('confirmModal').classList.remove('show');
     pendingTargetSource = null;
+}
+
+// 全部视图一键记录：点击事件卡片后直接提交，不弹确认框、不填备注（context 固定 manual）
+let directLogBusy = false;
+async function directLog(sourceId) {
+    if (directLogBusy) return;
+    directLogBusy = true;
+    closeSelectModal();
+    try {
+        const res = await fetch('/api/contributions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify([{
+                source: sourceId,
+                context: 'manual',
+                timestamp: new Date().toISOString(),
+                metadata: { device: 'web', manual: true }
+            }])
+        });
+        if (res.status === 401) { window.location.href = '/login.html'; return; }
+        if (res.ok) {
+            showToast('✅ 记录成功！');
+            await loadStats();
+            await loadData();
+            render();
+        } else showToast('❌ 记录失败，请重试');
+    } catch (e) {
+        showToast('❌ 网络请求失败');
+    } finally {
+        directLogBusy = false;
+    }
 }
 
 async function submitLog() {
